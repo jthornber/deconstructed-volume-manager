@@ -24,25 +24,17 @@ dependencies:
 - async >= 2.1.1.1
 - base >= 4.7 && < 5
 - bytestring >= 0.10.8.2
+- prettyprinter >= 1.2.1
 - stm >= 2.5.0.0
+- text >= 1.2.3.1
 
 library:
   source-dirs: src
 
 executables:
-  dvm-replicate:
+  dvm:
     main:                Main.hs
-    source-dirs:         replicate
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - dvm
-
-  dvm-activate:
-    main:                Main.hs
-    source-dirs:         activate
+    source-dirs:         app
     ghc-options:
     - -threaded
     - -rtsopts

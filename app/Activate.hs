@@ -1,19 +1,26 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Main where
+module Activate (
+    activateCmd
+    ) where
 
 import qualified Data.ByteString.Lazy.Char8 as L8
 import Data.List
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Util
 import GHC.Generics
 
 -- Prototype for compiling the activation of trees of devices.
 
 type Sector = Integer
-type DeviceName = String
-type DevicePath = FilePath
+type DeviceName = Text
+type DevicePath = Text
 
-data TableLine = TableLine Sector String deriving (Eq, Show)
+data TableLine = TableLine Sector Text deriving (Eq, Show)
 
 data Target = Target {
     targetLine :: TableLine,
@@ -27,35 +34,40 @@ newtype Table = Table {
 tableDeps :: Table -> [Device]
 tableDeps = concatMap targetDeps . tableTargets
 
-tableLinePrepare :: TableLine -> String
-tableLinePrepare (TableLine len txt) = (show len) ++ " " ++ txt
+tableLinePrepare :: TableLine -> Text
+tableLinePrepare (TableLine len txt) = T.concat [
+    T.pack $ show len,
+    T.pack " ",
+    txt]
 
-tablePrepare :: Table -> String
+tablePrepare :: Table -> Text
 tablePrepare = join . map (tableLinePrepare . targetLine) . tableTargets
     where
-        join = concat . intersperse "\n"
+        join = T.intercalate (T.pack "\n")
 
 data Instruction =
     Suspend DeviceName |
     Resume DeviceName |
-    Load DeviceName String |
+    Load DeviceName Text |
     Create DeviceName |
     Remove DeviceName
     deriving (Generic, Show, Eq)
 
-instance ToJSON Instruction
-instance FromJSON Instruction
-
-prettyInstruction :: Instruction -> String
-prettyInstruction (Suspend n) = "SUSPEND\t" ++ n
-prettyInstruction (Resume n) = "RESUME\t" ++ n
-prettyInstruction (Load n txt) = "LOAD\t" ++ n ++ "\n" ++ txt ++ "\n"
-prettyInstruction (Create n) = "CREATE\t" ++ n
-prettyInstruction (Remove n) = "REMOVE\t" ++ n
+prettyInstruction :: Instruction -> Doc ()
+prettyInstruction (Suspend n) = pretty "SUSPEND" <+> pretty n
+prettyInstruction (Resume n) = pretty "RESUME" <+> pretty n
+prettyInstruction (Load n txt) = hsep [
+    pretty "LOAD",
+    pretty n,
+    hardline,
+    pretty "    " <> (align $ pretty txt)
+    ]
+prettyInstruction (Create n) = hsep . map pretty $ [T.pack "CREATE", n]
+prettyInstruction (Remove n) = pretty "REMOVE" <+> pretty n
 
 -- FIXME: use a proper pretty printer
-prettyProgram :: [Instruction] -> String
-prettyProgram = concat . intersperse "\n" . map prettyInstruction
+prettyProgram :: [Instruction] -> Doc ()
+prettyProgram = vcat . map prettyInstruction
 
 data Device =
     DMDevice DeviceName Table |
@@ -70,8 +82,8 @@ data Device =
 -- to do this in a state monad.  We also need to combine this with the IO monad
 -- since we have to check the name is unused.
 
-devPath :: Device -> FilePath
-devPath (DMDevice n _) = "/dev/mapper/" ++ n
+devPath :: Device -> Text
+devPath (DMDevice n _) = T.append (T.pack "/dev/mapper/") n
 devPath (ExternalDevice p) = p
 
 newDev :: DeviceName -> Table -> [Instruction]
@@ -104,19 +116,22 @@ data Linear = Linear {
 
 linearTarget :: Device -> Sector -> Sector -> Target
 linearTarget dev b e = Target {
-    targetLine = TableLine (e - b) ((devPath dev) ++ " " ++ (show b)),
+    targetLine = TableLine (e - b) (T.concat [
+        devPath dev,
+        T.pack " ",
+        T.pack $ show b]),
     targetDeps = [dev]
 }
 
 ----------------------------------------------
 
 sda, sdb :: Device
-sda = ExternalDevice "/dev/sda"
-sdb = ExternalDevice "/dev/sdb"
+sda = ExternalDevice (T.pack "/dev/sda")
+sdb = ExternalDevice (T.pack "/dev/sdb")
 
-main :: IO ()
-main = do
-    L8.putStrLn (encode $ activate (DMDevice "test1" table))
+activateCmd :: [Text] -> IO ()
+activateCmd _ = do
+    putDocW 80 (prettyProgram $ activate (DMDevice (T.pack "test1") table))
     where
         table = Table [linearTarget sda 0 1024, linearTarget sdb 0 1024]
 

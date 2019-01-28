@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 
-module Main where
+module Replicate (
+    replicateCmd
+    ) where
 
 import Control.Concurrent.Async
 import Control.Exception
@@ -88,6 +90,6 @@ main = do
                     Right () -> putStrLn "Verified!"
                     -}
 
-main :: IO ()
-main = putStrLn "Hello, world!"
+replicateCmd :: [String] -> IO ()
+replicateCmd _ = putStrLn "Hello, world!"
 
