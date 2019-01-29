@@ -212,6 +212,33 @@ instance ToTarget ThinPool where
 
 ----------------------------------------------
 
+data Thin = Thin {
+    thinLen :: Sector,
+    thinPoolDev :: Device,
+    thinId :: Integer,
+    thinExternalOrigin :: Maybe Device
+}
+
+formatTLine :: Thin -> Text
+formatTLine t = join ([
+    lit "thin",
+    nr thinLen,
+    dev thinPoolDev,
+    nr thinId] ++ (maybeToList (devPath <$> (thinExternalOrigin t))))
+    where
+        lit v = T.pack v
+        nr fn = T.pack . show . fn $ t
+        dev fn = devPath . fn $ t
+        join = T.intercalate (T.pack " ")
+
+instance ToTarget Thin where
+    toTarget t = Target {
+        targetLine = TableLine (thinLen t) (formatTLine t),
+        targetDeps = [thinPoolDev t] ++ (maybeToList . thinExternalOrigin $ t)
+    }
+
+----------------------------------------------
+
 sda, sdb :: Device
 sda = ExternalDevice (T.pack "/dev/sda")
 sdb = ExternalDevice (T.pack "/dev/sdb")
