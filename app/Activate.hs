@@ -21,7 +21,7 @@ type Sector = Integer
 type DeviceName = Text
 type DevicePath = Text
 
-data TableLine = TableLine Sector Text deriving (Eq, Show)
+data TableLine = TableLine Text Sector Text deriving (Eq, Show)
 
 data Target = Target {
     targetLine :: TableLine,
@@ -36,7 +36,9 @@ tableDeps :: Table -> [Device]
 tableDeps = concatMap targetDeps . tableTargets
 
 tableLinePrepare :: TableLine -> Text
-tableLinePrepare (TableLine len txt) = T.concat [
+tableLinePrepare (TableLine n len txt) = T.concat [
+    n,
+    T.pack " ",
     T.pack $ show len,
     T.pack " ",
     txt]
@@ -120,7 +122,7 @@ data Linear = Linear {
 
 instance ToTarget Linear where
     toTarget (Linear dev b e) = Target {
-        targetLine = TableLine (e - b) (T.concat [
+        targetLine = TableLine (T.pack "linear") (e - b) (T.concat [
             devPath dev,
             T.pack " ",
             T.pack $ show b]),
@@ -135,7 +137,7 @@ data Error = Error {
 
 instance ToTarget Error where
     toTarget (Error len) = Target {
-        targetLine = TableLine len (T.pack "error"),
+        targetLine = TableLine (T.pack "error") len (T.pack ""),
         targetDeps = []
     }
 
@@ -149,8 +151,7 @@ data Striped = Striped {
 
 instance ToTarget Striped where
     toTarget (Striped l c ds) = Target {
-        targetLine = TableLine l (join ([T.pack "striped ",
-                                         T.pack (show c)] ++
+        targetLine = TableLine (T.pack "stiped") l (join ([T.pack (show c)] ++
                                          concatMap expand ds)),
         targetDeps = map fst ds
     }
@@ -177,8 +178,6 @@ data ThinPool = ThinPool {
 
 formatTPLine :: ThinPool -> Text
 formatTPLine tp = join ([
-    lit "thin-pool",
-    nr thinPoolLen,
     dev thinPoolMetadataDev,
     dev thinPoolDataDev,
     nr thinPoolBlockSize,
@@ -206,7 +205,7 @@ formatTPLine tp = join ([
 
 instance ToTarget ThinPool where
     toTarget tp = Target {
-        targetLine = TableLine (thinPoolLen tp) (formatTPLine tp),
+        targetLine = TableLine (T.pack "thin-pool") (thinPoolLen tp) (formatTPLine tp),
         targetDeps = [thinPoolDataDev tp, thinPoolMetadataDev tp]
     }
 
@@ -221,8 +220,6 @@ data Thin = Thin {
 
 formatTLine :: Thin -> Text
 formatTLine t = join ([
-    lit "thin",
-    nr thinLen,
     dev thinPoolDev,
     nr thinId] ++ (maybeToList (devPath <$> (thinExternalOrigin t))))
     where
@@ -233,9 +230,55 @@ formatTLine t = join ([
 
 instance ToTarget Thin where
     toTarget t = Target {
-        targetLine = TableLine (thinLen t) (formatTLine t),
+        targetLine = TableLine (T.pack "thin") (thinLen t) (formatTLine t),
         targetDeps = [thinPoolDev t] ++ (maybeToList . thinExternalOrigin $ t)
     }
+
+----------------------------------------------
+
+-- FIXME: add validation of the keys
+data CachePolicy = CachePolicy {
+    policyName :: Text,
+    policyKeys :: [(Text, Text)]
+}
+
+data Cache = Cache {
+    cacheLen :: Sector,
+    cacheMetadataDev :: Device,
+    cacheFastDev :: Device,
+    cacheOriginDev :: Device,
+    cacheBlockSize :: Sector,
+    cacheFeatures :: [Text],
+    cachePolicy :: CachePolicy
+}
+
+formatCLine :: Cache -> Text
+formatCLine c = join [
+    dev cacheMetadataDev,
+    dev cacheFastDev,
+    dev cacheOriginDev,
+    nr cacheBlockSize,
+    len (cacheFeatures c),
+    join (cacheFeatures c),
+    formatPolicyLine (cachePolicy c)]
+    where
+        lit v = T.pack v
+        nr fn = T.pack . show . fn $ c
+        dev fn = devPath . fn $ c
+        len = T.pack . show . length
+        join = T.intercalate (T.pack " ")
+        formatPolicyLine (CachePolicy n ks) = join ([n] ++ (concatMap expand ks))
+        expand (k, v) = [k, v]
+
+instance ToTarget Cache where
+    toTarget c = Target {
+        targetLine = TableLine (T.pack "cache") (cacheLen c) (formatCLine c),
+        targetDeps = [
+            cacheMetadataDev c,
+            cacheFastDev c,
+            cacheOriginDev c]
+    }
+
 
 ----------------------------------------------
 
