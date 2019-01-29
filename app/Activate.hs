@@ -7,6 +7,7 @@ module Activate (
 
 import qualified Data.ByteString.Lazy.Char8 as L8
 import Data.List
+import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -54,16 +55,16 @@ data Instruction =
     deriving (Generic, Show, Eq)
 
 prettyInstruction :: Instruction -> Doc ()
-prettyInstruction (Suspend n) = pretty "SUSPEND" <+> pretty n
-prettyInstruction (Resume n) = pretty "RESUME" <+> pretty n
+prettyInstruction (Suspend n) = pretty "suspend" <+> pretty n
+prettyInstruction (Resume n) = pretty "resume" <+> pretty n
 prettyInstruction (Load n txt) = hsep [
-    pretty "LOAD",
+    pretty "load",
     pretty n,
     hardline,
     pretty "    " <> (align $ pretty txt)
     ]
-prettyInstruction (Create n) = hsep . map pretty $ [T.pack "CREATE", n]
-prettyInstruction (Remove n) = pretty "REMOVE" <+> pretty n
+prettyInstruction (Create n) = hsep . map pretty $ [T.pack "create", n]
+prettyInstruction (Remove n) = pretty "remove" <+> pretty n
 
 -- FIXME: use a proper pretty printer
 prettyProgram :: [Instruction] -> Doc ()
@@ -108,20 +109,106 @@ deactivate (ExternalDevice _) = []
 
 ----------------------------------------------
 
+class ToTarget a where
+    toTarget :: a -> Target
+
 data Linear = Linear {
     linearDev :: Device,
     linearBegin :: Sector,
     linearEnd :: Sector
+} deriving (Eq, Show)
+
+instance ToTarget Linear where
+    toTarget (Linear dev b e) = Target {
+        targetLine = TableLine (e - b) (T.concat [
+            devPath dev,
+            T.pack " ",
+            T.pack $ show b]),
+        targetDeps = [dev]
+    }
+
+----------------------------------------------
+
+data Error = Error {
+    errorLen :: Sector
+} deriving (Eq, Show)
+
+instance ToTarget Error where
+    toTarget (Error len) = Target {
+        targetLine = TableLine len (T.pack "error"),
+        targetDeps = []
+    }
+
+----------------------------------------------
+
+data Striped = Striped {
+    stripedLen :: Sector,
+    stripedChunkSize :: Sector,
+    stripedDevs :: [(Device, Sector)]
+} deriving (Eq, Show)
+
+instance ToTarget Striped where
+    toTarget (Striped l c ds) = Target {
+        targetLine = TableLine l (join ([T.pack "striped ",
+                                         T.pack (show c)] ++
+                                         concatMap expand ds)),
+        targetDeps = map fst ds
+    }
+        where
+            expand (d, s) = [devPath d, T.pack $ show s]
+            join = T.intercalate (T.pack " ")
+
+----------------------------------------------
+
+type Percent = Int
+
+data ThinPool = ThinPool {
+    thinPoolLen :: Sector,
+    thinPoolDataDev :: Device,
+    thinPoolMetadataDev :: Device,
+    thinPoolBlockSize :: Sector,
+    thinPoolLowWaterMark :: Percent,
+    thinPoolZero :: Bool,
+    thinPoolDiscard :: Bool,
+    thinPoolDiscardPassdown :: Bool,
+    thinPoolReadOnly :: Bool,
+    thinPoolErrorIfNoSpace :: Bool
 }
 
-linearTarget :: Device -> Sector -> Sector -> Target
-linearTarget dev b e = Target {
-    targetLine = TableLine (e - b) (T.concat [
-        devPath dev,
-        T.pack " ",
-        T.pack $ show b]),
-    targetDeps = [dev]
-}
+formatTPLine :: ThinPool -> Text
+formatTPLine tp = join ([
+    lit "thin-pool",
+    nr thinPoolLen,
+    dev thinPoolMetadataDev,
+    dev thinPoolDataDev,
+    nr thinPoolBlockSize,
+    nr thinPoolLowWaterMark,
+    len opts] ++ opts)
+    where
+        opts = concatMap maybeToList [
+            rflag thinPoolZero "skip-block-zeroing",
+            rflag thinPoolDiscard "ignore-discard",
+            flag thinPoolDiscardPassdown "no-discard-passdown",
+            flag thinPoolReadOnly "read-only",
+            flag thinPoolErrorIfNoSpace "error-if-no-space"]
+
+        flag fn f = if fn tp
+                    then Just . T.pack $ f
+                    else Nothing
+
+        rflag fn = flag (not . fn)
+
+        lit v = T.pack v
+        nr fn = T.pack . show . fn $ tp
+        dev fn = devPath . fn $ tp
+        len = T.pack . show . length
+        join = T.intercalate (T.pack " ")
+
+instance ToTarget ThinPool where
+    toTarget tp = Target {
+        targetLine = TableLine (thinPoolLen tp) (formatTPLine tp),
+        targetDeps = [thinPoolDataDev tp, thinPoolMetadataDev tp]
+    }
 
 ----------------------------------------------
 
@@ -131,7 +218,13 @@ sdb = ExternalDevice (T.pack "/dev/sdb")
 
 activateCmd :: [Text] -> IO ()
 activateCmd _ = do
-    putDocW 80 (prettyProgram $ activate (DMDevice (T.pack "test1") table))
+    putStrLn "ACTIVATE:"
+    putDocW 80 (indent 4 (prettyProgram $ activate dev))
+    putStrLn "\n\nDEACTIVATE:"
+    putDocW 80 (indent 4 (prettyProgram $ deactivate dev))
+    putStrLn ""
     where
-        table = Table [linearTarget sda 0 1024, linearTarget sdb 0 1024]
+        dev = DMDevice (T.pack "test1") table
+        table = Table [toTarget (Linear sda 0 1024),
+                       toTarget (Linear sdb 0 1024)]
 
