@@ -5,6 +5,7 @@ module Activate (
     activateCmd
     ) where
 
+import DeviceMapper.Instructions
 import DeviceMapper.Types
 import DeviceMapper.Targets
 
@@ -19,30 +20,6 @@ import Data.Text.Prettyprint.Doc.Util
 import GHC.Generics
 
 -- Prototype for compiling the activation of trees of devices.
-
-data Instruction =
-    Suspend DeviceName |
-    Resume DeviceName |
-    Load DeviceName Text |
-    Create DeviceName |
-    Remove DeviceName
-    deriving (Generic, Show, Eq)
-
-prettyInstruction :: Instruction -> Doc ()
-prettyInstruction (Suspend n) = pretty "suspend" <+> pretty n
-prettyInstruction (Resume n) = pretty "resume" <+> pretty n
-prettyInstruction (Load n txt) = hsep [
-    pretty "load",
-    pretty n,
-    hardline,
-    pretty "    " <> (align $ pretty txt)
-    ]
-prettyInstruction (Create n) = hsep . map pretty $ [T.pack "create", n]
-prettyInstruction (Remove n) = pretty "remove" <+> pretty n
-
--- FIXME: use a proper pretty printer
-prettyProgram :: [Instruction] -> Doc ()
-prettyProgram = vcat . map prettyInstruction
 
 -- The device tree is implied by the following the deps
 -- from a Device downwards.
