@@ -1,7 +1,10 @@
 module DeviceMapper.IoctlMarshal (
     Version(..),
     putVersionIoctl,
-    getVersionIoctl
+    getVersionIoctl,
+
+    putRemoveAllIoctl,
+    getRemoveAllIoctl
     ) where
 
 import DeviceMapper.IoctlConsts
@@ -147,5 +150,11 @@ putVersionIoctl = putHeader defaultHeader 0
 
 getVersionIoctl :: Get Version
 getVersionIoctl = getHeader >>= (return . hdrVersion)
+
+putRemoveAllIoctl :: Put
+putRemoveAllIoctl = putHeader defaultHeader 0
+
+getRemoveAllIoctl :: Get ()
+getRemoveAllIoctl = getHeader >> return ()
 
 ----------------------------------------

@@ -3,7 +3,8 @@
 
 module DeviceMapper.Ioctl (
     withControlDevice,
-    version
+    version,
+    removeAll
     ) where
 
 import Data.Binary.Get
@@ -74,5 +75,8 @@ withControlDevice fn = do
 
 version :: Fd -> IO (Either CInt Version)
 version ctrl = runCmd ctrl dmVersionIoctl putVersionIoctl getVersionIoctl
+
+removeAll :: Fd -> IO (Either CInt ())
+removeAll ctrl = runCmd ctrl dmRemoveAllIoctl putVersionIoctl getRemoveAllIoctl
 
 ------------------------------------------

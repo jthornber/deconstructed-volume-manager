@@ -8,7 +8,8 @@ module DeviceMapper.IoctlConsts (
     dmDir,
     dmControlNode,
     dmControlDev,
-    dmVersionIoctl
+    dmVersionIoctl,
+    dmRemoveAllIoctl
     ) where
 
 import Data.Word
@@ -42,5 +43,8 @@ dmControlDev = concat ["/dev/", dmDir, "/", dmControlNode]
 
 dmVersionIoctl :: CInt
 dmVersionIoctl = #const DM_VERSION
+
+dmRemoveAllIoctl :: CInt
+dmRemoveAllIoctl = #const DM_REMOVE_ALL
 
 -----------------------------------------------
