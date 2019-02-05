@@ -13,7 +13,9 @@ module DeviceMapper.IoctlConsts (
     dmListDevicesIoctl,
     dmCreateDeviceIoctl,
     dmRemoveDeviceIoctl,
-    dmBufferFullFlag
+    dmSuspendDeviceIoctl,
+    dmBufferFullFlag,
+    dmSuspendDeviceFlag
     ) where
 
 import Data.Word
@@ -60,7 +62,13 @@ dmCreateDeviceIoctl = #const DM_DEV_CREATE
 dmRemoveDeviceIoctl :: CInt
 dmRemoveDeviceIoctl = #const DM_DEV_REMOVE
 
-dmBufferFullFlag :: CInt
+dmSuspendDeviceIoctl :: CInt
+dmSuspendDeviceIoctl = #const DM_DEV_SUSPEND
+
+dmBufferFullFlag :: Word32
 dmBufferFullFlag = #const DM_BUFFER_FULL_FLAG
+
+dmSuspendDeviceFlag :: Word32
+dmSuspendDeviceFlag = #const DM_SUSPEND_FLAG
 
 -----------------------------------------------

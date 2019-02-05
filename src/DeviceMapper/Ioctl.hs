@@ -8,7 +8,9 @@ module DeviceMapper.Ioctl (
     removeAll,
     listDevices,
     createDevice,
-    removeDevice
+    removeDevice,
+    suspendDevice,
+    resumeDevice
     ) where
 
 import Control.Exception
@@ -106,7 +108,7 @@ bufferSizes :: [Int]
 bufferSizes = [8192, 64 * 1024, 512 * 1024]
 
 listDevices :: Fd -> IO (IoctlResult [DeviceInfo])
-listDevices ctrl = do
+listDevices ctrl =
     runCmdAcross ctrl dmListDevicesIoctl putListDevicesIoctl getListDevicesIoctl bufferSizes
 
 createDevice :: Text -> Text -> Fd -> IO (IoctlResult ())
@@ -116,5 +118,13 @@ createDevice name uuid ctrl =
 removeDevice :: Text -> Text -> Fd -> IO (IoctlResult ())
 removeDevice name uuid ctrl =
     runCmd ctrl dmRemoveDeviceIoctl (putRemoveDeviceIoctl name uuid) getRemoveDeviceIoctl
+
+suspendDevice :: Text -> Text -> Fd -> IO (IoctlResult ())
+suspendDevice name uuid ctrl =
+    runCmd ctrl dmSuspendDeviceIoctl (putSuspendDeviceIoctl name uuid) getSuspendDeviceIoctl
+
+resumeDevice :: Text -> Text -> Fd -> IO (IoctlResult ())
+resumeDevice name uuid ctrl =
+    runCmd ctrl dmSuspendDeviceIoctl (putResumeDeviceIoctl name uuid) getResumeDeviceIoctl
 
 ------------------------------------------

@@ -15,6 +15,12 @@ module DeviceMapper.IoctlMarshal (
     putRemoveDeviceIoctl,
     getRemoveDeviceIoctl,
 
+    putSuspendDeviceIoctl,
+    getSuspendDeviceIoctl,
+
+    putResumeDeviceIoctl,
+    getResumeDeviceIoctl,
+
     getEnoughSpace
     ) where
 
@@ -31,6 +37,8 @@ import qualified Data.ByteString as BS
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+
+import Foreign.C.Types
 
 ----------------------------------------
 
@@ -223,23 +231,39 @@ getListDevicesIoctl = do
     skip . fromIntegral . hdrDataOffset $ hdr
     getDeviceInfos []
 
-devHeader :: Text -> Text -> Header
-devHeader name uuid = do
+devHeader :: Text -> Text -> Word32 -> Header
+devHeader name uuid flags = do
     defaultHeader {
         hdrName = name,
-        hdrUUID = uuid
+        hdrUUID = uuid,
+        hdrFlags = flags
     }
 
+putDev :: Word32 -> Text -> Text -> Put
+putDev flags name uuid = putHeader (devHeader name uuid flags) 0
+
 putCreateDeviceIoctl :: Text -> Text -> Put
-putCreateDeviceIoctl name uuid = putHeader (devHeader name uuid) 0
+putCreateDeviceIoctl = putDev 0
 
 getCreateDeviceIoctl :: Get ()
 getCreateDeviceIoctl = return ()
 
 putRemoveDeviceIoctl :: Text -> Text -> Put
-putRemoveDeviceIoctl name uuid = putHeader (devHeader name uuid) 0
+putRemoveDeviceIoctl = putDev 0
 
 getRemoveDeviceIoctl :: Get ()
 getRemoveDeviceIoctl = return ()
+
+putSuspendDeviceIoctl :: Text -> Text -> Put
+putSuspendDeviceIoctl = putDev dmSuspendDeviceFlag
+
+getSuspendDeviceIoctl :: Get ()
+getSuspendDeviceIoctl = return ()
+
+putResumeDeviceIoctl :: Text -> Text -> Put
+putResumeDeviceIoctl = putDev 0
+
+getResumeDeviceIoctl :: Get ()
+getResumeDeviceIoctl = return ()
 
 ----------------------------------------
