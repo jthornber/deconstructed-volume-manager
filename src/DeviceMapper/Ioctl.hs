@@ -7,7 +7,8 @@ module DeviceMapper.Ioctl (
     version,
     removeAll,
     listDevices,
-    createDevice
+    createDevice,
+    removeDevice
     ) where
 
 import Control.Exception
@@ -111,5 +112,9 @@ listDevices ctrl = do
 createDevice :: Text -> Text -> Fd -> IO (IoctlResult ())
 createDevice name uuid ctrl =
     runCmd ctrl dmCreateDeviceIoctl (putCreateDeviceIoctl name uuid) getCreateDeviceIoctl
+
+removeDevice :: Text -> Text -> Fd -> IO (IoctlResult ())
+removeDevice name uuid ctrl =
+    runCmd ctrl dmRemoveDeviceIoctl (putRemoveDeviceIoctl name uuid) getRemoveDeviceIoctl
 
 ------------------------------------------

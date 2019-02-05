@@ -12,6 +12,7 @@ module DeviceMapper.IoctlConsts (
     dmRemoveAllIoctl,
     dmListDevicesIoctl,
     dmCreateDeviceIoctl,
+    dmRemoveDeviceIoctl,
     dmBufferFullFlag
     ) where
 
@@ -55,6 +56,9 @@ dmListDevicesIoctl = #const DM_LIST_DEVICES
 
 dmCreateDeviceIoctl :: CInt
 dmCreateDeviceIoctl = #const DM_DEV_CREATE
+
+dmRemoveDeviceIoctl :: CInt
+dmRemoveDeviceIoctl = #const DM_DEV_REMOVE
 
 dmBufferFullFlag :: CInt
 dmBufferFullFlag = #const DM_BUFFER_FULL_FLAG

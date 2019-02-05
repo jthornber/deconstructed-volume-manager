@@ -11,8 +11,12 @@ import qualified Data.Text as T
 dmExecCmd :: [Text] -> IO ()
 dmExecCmd _ =
     withControlDevice $ \ctrl -> do
-        createDevice (T.pack "bar") (T.pack "") ctrl
+        createDevice name uuid ctrl
         r <- listDevices ctrl
         putStrLn . show $ r
-        removeAll ctrl
+        removeDevice name uuid ctrl
         return ()
+    where
+        name = T.pack "bar"
+        uuid = T.pack ""
+

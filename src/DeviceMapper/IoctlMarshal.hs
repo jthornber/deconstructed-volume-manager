@@ -12,6 +12,9 @@ module DeviceMapper.IoctlMarshal (
     putCreateDeviceIoctl,
     getCreateDeviceIoctl,
 
+    putRemoveDeviceIoctl,
+    getRemoveDeviceIoctl,
+
     getEnoughSpace
     ) where
 
@@ -220,15 +223,23 @@ getListDevicesIoctl = do
     skip . fromIntegral . hdrDataOffset $ hdr
     getDeviceInfos []
 
+devHeader :: Text -> Text -> Header
+devHeader name uuid = do
+    defaultHeader {
+        hdrName = name,
+        hdrUUID = uuid
+    }
+
 putCreateDeviceIoctl :: Text -> Text -> Put
-putCreateDeviceIoctl name uuid = do
-    putHeader hdr 0
-    where
-        hdr = defaultHeader {
-            hdrName = name,
-            hdrUUID = uuid}
+putCreateDeviceIoctl name uuid = putHeader (devHeader name uuid) 0
 
 getCreateDeviceIoctl :: Get ()
 getCreateDeviceIoctl = return ()
+
+putRemoveDeviceIoctl :: Text -> Text -> Put
+putRemoveDeviceIoctl name uuid = putHeader (devHeader name uuid) 0
+
+getRemoveDeviceIoctl :: Get ()
+getRemoveDeviceIoctl = return ()
 
 ----------------------------------------
