@@ -3,6 +3,7 @@ module DeviceMapper.Types (
     DeviceName,
     DevicePath,
     Device(..),
+    DeviceInfo(..),
     devPath,
     TableLine(..),
     Target(..),
@@ -15,6 +16,7 @@ module DeviceMapper.Types (
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Word
 
 ------------------------------------------
 
@@ -26,6 +28,12 @@ data Device =
     DMDevice DeviceName Table |
     ExternalDevice DevicePath
     deriving (Show, Eq)
+
+-- This is returned by device mapper
+data DeviceInfo = DeviceInfo {
+    devInfoDevice :: Word64,
+    devInfoName :: Text
+} deriving (Eq, Show)
 
 devPath :: Device -> Text
 devPath (DMDevice n _) = T.append (T.pack "/dev/mapper/") n

@@ -10,10 +10,8 @@ import qualified Data.Text as T
 
 dmExecCmd :: [Text] -> IO ()
 dmExecCmd _ = do
-    r <- withControlDevice removeAll
-    case r of
-        (Left err) -> putStrLn $ "Failed with errno " ++ (show err)
-        (Right v) -> putStrLn $ "success: " ++ (show v)
+    r <- withControlDevice listDevices
+    putStrLn . show $ r
 
 {-
 join :: [Text] -> Text

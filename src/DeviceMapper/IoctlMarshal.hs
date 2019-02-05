@@ -4,13 +4,21 @@ module DeviceMapper.IoctlMarshal (
     getVersionIoctl,
 
     putRemoveAllIoctl,
-    getRemoveAllIoctl
+    getRemoveAllIoctl,
+
+    putListDevicesIoctl,
+    getListDevicesIoctl,
+
+    getEnoughSpace
     ) where
 
+import DeviceMapper.Types
 import DeviceMapper.IoctlConsts
 
 import Data.Binary.Get
 import Data.Binary.Put
+import Data.Bits
+import Data.Char
 import Data.Word
 import qualified Data.ByteString as BS
 
@@ -28,13 +36,15 @@ data Version = Version {
 
 data Header = Header {
     hdrVersion :: Version,
+    hdrDataSize :: Word32,
+    hdrDataOffset :: Word32,
     hdrTargetCount :: Word32,
     hdrFlags :: Word32,
     hdrEvent :: Word32,
     hdrDev :: Word64,
     hdrName :: Text,
     hdrUUID :: Text
-}
+} deriving (Eq, Show)
 
 putZeroes :: Int -> Put
 putZeroes n = sequence_ (replicate n zero)
@@ -57,6 +67,15 @@ getFixedWidthString n = getByteString n >>= (return . decodeBytes)
     where
         decodeBytes = T.decodeUtf8 . BS.pack . trim . BS.unpack
         trim = reverse . takeWhile (/= 0) . reverse
+
+getCString :: Get Text
+getCString = loop []
+    where
+        loop acc = do
+            c <- getWord8
+            if c == 0
+            then return $ T.pack (reverse acc)
+            else loop (chr (fromIntegral c) : acc)
 
 putVersion :: Version -> Put
 putVersion (Version ma mi pa) = do
@@ -124,6 +143,8 @@ getHeader = do
 
     return $ Header {
         hdrVersion = v,
+        hdrDataSize = len,
+        hdrDataOffset = structSize,
         hdrTargetCount = targetCount,
         hdrFlags = flags,
         hdrEvent = event,
@@ -132,11 +153,18 @@ getHeader = do
         hdrUUID = dmUUID
     }
 
+getEnoughSpace :: Get Bool
+getEnoughSpace = do
+    hdr <- getHeader
+    return $ ((hdrFlags hdr) .&. (fromIntegral dmBufferFullFlag)) == 0
+
 ----------------------------------------
 
 defaultHeader :: Header
 defaultHeader = Header {
     hdrVersion = Version dmVersionMajor dmVersionMinor dmVersionPatch,
+    hdrDataSize = 0,
+    hdrDataOffset = 0,
     hdrTargetCount = 0,
     hdrFlags = 0,
     hdrEvent = 0,
@@ -156,5 +184,37 @@ putRemoveAllIoctl = putHeader defaultHeader 0
 
 getRemoveAllIoctl :: Get ()
 getRemoveAllIoctl = getHeader >> return ()
+
+-- FIXME: we're packing zeroes for the resultant payload
+-- which is v. inefficient
+putListDevicesIoctl :: Int -> Put
+putListDevicesIoctl size = do
+    putHeader defaultHeader size
+    putZeroes size
+
+getDeviceInfo :: Get (Word64, Word32, Text)
+getDeviceInfo = do
+    dev <- getWord64host
+    offset <- getWord32host
+    name <- getCString
+    return $ (dev, offset, name)
+
+getDeviceInfos :: [DeviceInfo] -> Get [DeviceInfo]
+getDeviceInfos acc = do
+    (dev, offset, name) <- lookAhead getDeviceInfo
+    if dev == 0
+    then return $ reverse acc
+    else let acc' = DeviceInfo dev name : acc in
+        if offset == 0
+        then return . reverse $ acc'
+        else do
+            skip (fromIntegral offset)
+            getDeviceInfos acc'
+
+getListDevicesIoctl :: Get [DeviceInfo]
+getListDevicesIoctl = do
+    hdr <- lookAhead getHeader
+    skip . fromIntegral . hdrDataOffset $ hdr
+    getDeviceInfos []
 
 ----------------------------------------

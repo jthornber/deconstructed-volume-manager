@@ -9,7 +9,9 @@ module DeviceMapper.IoctlConsts (
     dmControlNode,
     dmControlDev,
     dmVersionIoctl,
-    dmRemoveAllIoctl
+    dmRemoveAllIoctl,
+    dmListDevicesIoctl,
+    dmBufferFullFlag
     ) where
 
 import Data.Word
@@ -46,5 +48,11 @@ dmVersionIoctl = #const DM_VERSION
 
 dmRemoveAllIoctl :: CInt
 dmRemoveAllIoctl = #const DM_REMOVE_ALL
+
+dmListDevicesIoctl :: CInt
+dmListDevicesIoctl = #const DM_LIST_DEVICES
+
+dmBufferFullFlag :: CInt
+dmBufferFullFlag = #const DM_BUFFER_FULL_FLAG
 
 -----------------------------------------------
