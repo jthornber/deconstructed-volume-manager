@@ -21,6 +21,9 @@ module DeviceMapper.IoctlMarshal (
     putResumeDeviceIoctl,
     getResumeDeviceIoctl,
 
+    putClearTableIoctl,
+    getClearTableIoctl,
+
     getEnoughSpace
     ) where
 
@@ -265,5 +268,11 @@ putResumeDeviceIoctl = putDev 0
 
 getResumeDeviceIoctl :: Get ()
 getResumeDeviceIoctl = return ()
+
+putClearTableIoctl :: Text -> Text -> Put
+putClearTableIoctl = putDev 0
+
+getClearTableIoctl :: Get ()
+getClearTableIoctl = return ()
 
 ----------------------------------------

@@ -127,4 +127,8 @@ resumeDevice :: Text -> Text -> Fd -> IO (IoctlResult ())
 resumeDevice name uuid ctrl =
     runCmd ctrl dmSuspendDeviceIoctl (putResumeDeviceIoctl name uuid) getResumeDeviceIoctl
 
+clearTable :: Text -> Text -> Fd -> IO (IoctlResult ())
+clearTable name uuid ctrl =
+    runCmd ctrl dmClearTableIoctl (putClearTableIoctl name uuid) getClearTableIoctl
+
 ------------------------------------------
