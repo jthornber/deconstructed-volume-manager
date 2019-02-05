@@ -6,7 +6,8 @@ module DeviceMapper.Ioctl (
     withControlDevice,
     version,
     removeAll,
-    listDevices
+    listDevices,
+    createDevice
     ) where
 
 import Control.Exception
@@ -24,6 +25,8 @@ import Foreign.C.String
 import Foreign.Marshal.Alloc
 import System.Posix.IO
 import System.Posix.Types
+import Data.Text (Text)
+import qualified Data.Text as T
 
 ------------------------------------------
 -- Data.Binary.Put wants lazy bytestrings, useCStringLen wants strict.
@@ -103,8 +106,10 @@ bufferSizes = [8192, 64 * 1024, 512 * 1024]
 
 listDevices :: Fd -> IO (IoctlResult [DeviceInfo])
 listDevices ctrl = do
-    runCmd ctrl dmListDevicesIoctl (putListDevicesIoctl 8192) getListDevicesIoctl
+    runCmdAcross ctrl dmListDevicesIoctl putListDevicesIoctl getListDevicesIoctl bufferSizes
 
-    -- runCmdAcross ctrl dmListDevicesIoctl putListDevicesIoctl getListDevicesIoctl bufferSizes
+createDevice :: Text -> Text -> Fd -> IO (IoctlResult ())
+createDevice name uuid ctrl =
+    runCmd ctrl dmCreateDeviceIoctl (putCreateDeviceIoctl name uuid) getCreateDeviceIoctl
 
 ------------------------------------------
