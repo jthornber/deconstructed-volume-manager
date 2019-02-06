@@ -10,25 +10,33 @@ import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util
 import DeviceMapper.Types
 
+type Index = Integer
+
 data Instruction =
-    Suspend DeviceName |
-    Resume DeviceName |
-    Load DeviceName Text |
-    Create DeviceName |
-    Remove DeviceName
+    RemoveAll |
+    List |
+    Create DeviceId |
+    Remove DeviceId |
+    Suspend DeviceId |
+    Resume DeviceId |
+    Load DeviceId [TableLine] |
+    Info DeviceId |
+    Table DeviceId
     deriving (Show, Eq)
 
+showT = T.pack . show
+
 prettyInstruction :: Instruction -> Doc ()
-prettyInstruction (Suspend n) = pretty "suspend" <+> pretty n
-prettyInstruction (Resume n) = pretty "resume" <+> pretty n
-prettyInstruction (Load n txt) = hsep [
+prettyInstruction (Suspend n) = pretty "suspend" <+> pretty (show n)
+prettyInstruction (Resume n) = pretty "resume" <+> pretty (show n)
+prettyInstruction (Load n ts) = hsep [
     pretty "load",
-    pretty n,
+    pretty (show n),
     hardline,
-    pretty "    " <> (align $ pretty txt)
+    pretty "    " <> (align $ pretty (show ts))
     ]
-prettyInstruction (Create n) = hsep . map pretty $ [T.pack "create", n]
-prettyInstruction (Remove n) = pretty "remove" <+> pretty n
+prettyInstruction (Create n) = hsep . map pretty $ [T.pack "create", showT n]
+prettyInstruction (Remove n) = pretty "remove" <+> pretty (show n)
 
 -- FIXME: use a proper pretty printer
 prettyProgram :: [Instruction] -> Doc ()

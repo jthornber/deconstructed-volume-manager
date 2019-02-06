@@ -1,6 +1,8 @@
 module DeviceMapper.Types (
     Sector,
-    DeviceName,
+    DeviceId(..),
+    diName,
+    diUUID,
     DevicePath,
     Device(..),
     DeviceInfo(..),
@@ -14,6 +16,7 @@ module DeviceMapper.Types (
     ToTarget(..)
     ) where
 
+import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word
@@ -21,11 +24,23 @@ import Data.Word
 ------------------------------------------
 
 type Sector = Integer
-type DeviceName = Text
 type DevicePath = Text
 
+data DeviceId =
+    DeviceId (Maybe Text) (Maybe Text)
+    deriving (Eq, Show)
+
+emptyText :: Text
+emptyText = T.pack ""
+
+diName :: DeviceId -> Text
+diName (DeviceId mn _) = fromMaybe emptyText mn
+
+diUUID :: DeviceId -> Text
+diUUID (DeviceId _ mu) = fromMaybe emptyText mu
+
 data Device =
-    DMDevice DeviceName Table |
+    DMDevice DeviceId Table |
     ExternalDevice DevicePath
     deriving (Show, Eq)
 
@@ -36,7 +51,7 @@ data DeviceInfo = DeviceInfo {
 } deriving (Eq, Show)
 
 devPath :: Device -> Text
-devPath (DMDevice n _) = T.append (T.pack "/dev/mapper/") n
+devPath (DMDevice n _) = T.append (T.pack "/dev/mapper/") (diName n)
 devPath (ExternalDevice p) = p
 
 data TableLine = TableLine Text Sector Text deriving (Eq, Show)
@@ -62,10 +77,8 @@ tableLinePrepare (TableLine n len txt) = T.concat [
     T.pack " ",
     txt]
 
-tablePrepare :: Table -> Text
-tablePrepare = join . map (tableLinePrepare . targetLine) . tableTargets
-    where
-        join = T.intercalate (T.pack "\n")
+tablePrepare :: Table -> [TableLine]
+tablePrepare = map targetLine . tableTargets
 
 class ToTarget a where
     toTarget :: a -> Target

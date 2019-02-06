@@ -5,7 +5,7 @@ module Activate (
     activateCmd
     ) where
 
-import DeviceMapper.Instructions
+import qualified DeviceMapper.Instructions as I
 import DeviceMapper.Types
 import DeviceMapper.Targets
 
@@ -25,24 +25,24 @@ import GHC.Generics
 -- from a Device downwards.
 
 
-newDev :: DeviceName -> Table -> [Instruction]
-newDev n t = [Create n, Load n (tablePrepare t), Resume n]
+newDev :: DeviceId -> Table -> [I.Instruction]
+newDev n t = [I.Create n, I.Load n (tablePrepare t), I.Resume n]
 
-reloadDev :: DeviceName -> Table -> [Instruction]
-reloadDev n t = [Suspend n, Load n (tablePrepare t), Resume n]
+reloadDev :: DeviceId -> Table -> [I.Instruction]
+reloadDev n t = [I.Suspend n, I.Load n (tablePrepare t), I.Resume n]
 
-rmDev :: DeviceName -> [Instruction]
-rmDev n = [Remove n]
+rmDev :: DeviceId -> [I.Instruction]
+rmDev n = [I.Remove n]
 
-activate :: Device -> [Instruction]
+activate :: Device -> [I.Instruction]
 activate (DMDevice n t) = (concatMap activate (tableDeps t)) ++ (newDev n t)
 activate (ExternalDevice _) = []
 
-deactivate :: Device -> [Instruction]
+deactivate :: Device -> [I.Instruction]
 deactivate (DMDevice n t) = (rmDev n) ++ (concatMap deactivate (tableDeps t))
 deactivate (ExternalDevice _) = []
 
--- update :: Device -> Device -> [Instruction]
+-- update :: Device -> Device -> [I.Instruction]
 -- FIXME: finish
 
 ----------------------------------------------
@@ -56,12 +56,12 @@ sdb = ExternalDevice (T.pack "/dev/sdb")
 activateCmd :: [Text] -> IO ()
 activateCmd _ = do
     putStrLn "ACTIVATE:"
-    putDocW 80 (indent 4 (prettyProgram $ activate dev))
+    putDocW 80 (indent 4 (I.prettyProgram $ activate dev))
     putStrLn "\n\nDEACTIVATE:"
-    putDocW 80 (indent 4 (prettyProgram $ deactivate dev))
+    putDocW 80 (indent 4 (I.prettyProgram $ deactivate dev))
     putStrLn ""
     where
-        dev = DMDevice (T.pack "test1") table
+        dev = DMDevice (DeviceId (Just (T.pack "test1")) Nothing) table
         table = Table [toTarget (Linear sda 0 1024),
                        toTarget (Linear sdb 0 1024)]
 
