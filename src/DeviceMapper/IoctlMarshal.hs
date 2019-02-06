@@ -30,6 +30,9 @@ module DeviceMapper.IoctlMarshal (
     putStatusTableIoctl,
     getStatusTableIoctl,
 
+    putTableTableIoctl,
+    getTableTableIoctl,
+
     getEnoughSpace
     ) where
 
@@ -362,6 +365,14 @@ getStatusTableIoctl = do
             (t, next) <- lookAhead getTargetSpec
             skip next
             loop (n - 1) (t : ts)
+
+putTableTableIoctl :: Text -> Text -> Int -> Put
+putTableTableIoctl name uuid size = do
+    putHeader (devHeader name uuid dmStatusTableFlag) size
+    putZeroes size
+
+getTableTableIoctl :: Get [TableLine]
+getTableTableIoctl = getStatusTableIoctl
 
 traceIt :: (Show a) => a -> a
 traceIt x = trace (show x) x

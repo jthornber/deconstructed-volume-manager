@@ -27,8 +27,13 @@ dmExecCmd _ =
         putStrLn . show $ r
         suspendDevice name uuid ctrl
         resumeDevice name uuid ctrl
+
+        table <- tableTable name uuid ctrl
+        putStrLn . show $ table
+
         status <- statusTable name uuid ctrl
         putStrLn . show $ status
+
         removeDevice name uuid ctrl
         return ()
     where

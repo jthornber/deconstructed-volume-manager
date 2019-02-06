@@ -19,6 +19,7 @@ module DeviceMapper.IoctlConsts (
     dmStatusTableIoctl,
     dmBufferFullFlag,
     dmSuspendDeviceFlag,
+    dmStatusTableFlag,
     dmMaxTypeName,
     dmTargetSpecSize
     ) where
@@ -87,6 +88,9 @@ dmBufferFullFlag = #const DM_BUFFER_FULL_FLAG
 
 dmSuspendDeviceFlag :: Word32
 dmSuspendDeviceFlag = #const DM_SUSPEND_FLAG
+
+dmStatusTableFlag :: Word32
+dmStatusTableFlag = #const DM_STATUS_TABLE_FLAG
 
 dmTargetSpecSize :: CInt
 dmTargetSpecSize = #const sizeof(struct dm_target_spec)

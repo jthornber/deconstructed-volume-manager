@@ -12,7 +12,8 @@ module DeviceMapper.Ioctl (
     suspendDevice,
     resumeDevice,
     loadTable,
-    statusTable
+    statusTable,
+    tableTable
     ) where
 
 import Control.Exception
@@ -140,5 +141,9 @@ clearTable name uuid ctrl =
 statusTable :: Text -> Text -> Fd -> IO (IoctlResult [TableLine])
 statusTable name uuid ctrl =
     runCmdAcross ctrl dmStatusTableIoctl (putStatusTableIoctl name uuid) getStatusTableIoctl bufferSizes
+
+tableTable :: Text -> Text -> Fd -> IO (IoctlResult [TableLine])
+tableTable name uuid ctrl =
+    runCmdAcross ctrl dmStatusTableIoctl (putTableTableIoctl name uuid) getTableTableIoctl bufferSizes
 
 ------------------------------------------
