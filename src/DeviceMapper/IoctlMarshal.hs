@@ -27,6 +27,9 @@ module DeviceMapper.IoctlMarshal (
     putClearTableIoctl,
     getClearTableIoctl,
 
+    putStatusTableIoctl,
+    getStatusTableIoctl,
+
     getEnoughSpace
     ) where
 
@@ -87,7 +90,7 @@ getFixedWidthString :: Int -> Get Text
 getFixedWidthString n = getByteString n >>= (return . decodeBytes)
     where
         decodeBytes = T.decodeUtf8 . BS.pack . trim . BS.unpack
-        trim = reverse . takeWhile (/= 0) . reverse
+        trim = takeWhile (/= 0)
 
 putCString :: Text -> PutM Int
 putCString txt = do
@@ -296,8 +299,8 @@ tlSectors (TableLine _ len _) = fromIntegral len
 roundUp n d = ((n + d - 1) `div` d) * d
 calcPadding n d = (roundUp n d) - n
 
-putTableLine :: (Word64, TableLine) -> Put
-putTableLine (sectorStart, TableLine kind sectorSize args) = do
+putTargetSpec :: (Word64, TableLine) -> Put
+putTargetSpec (sectorStart, TableLine kind sectorSize args) = do
     putWord64host sectorStart
     putWord64host $ fromIntegral sectorSize
     putWord32host 0
@@ -309,6 +312,16 @@ putTableLine (sectorStart, TableLine kind sectorSize args) = do
         next = dmTargetSpecSize + fromIntegral (roundUp argsLen 8)
         argsLen = T.length args + 1
 
+getTargetSpec :: Get (TableLine, Int)
+getTargetSpec = do
+    sectorStart <- getWord64host
+    sectorSize <- getWord64host
+    status <- getWord32host
+    next <- getWord32host
+    kind <- getFixedWidthString $ fromIntegral dmMaxTypeName
+    args <- getCString
+    return (TableLine kind (fromIntegral sectorSize) args, fromIntegral next)
+
 calcOffsets :: [Word64] -> [Word64]
 calcOffsets xs = loop [0] xs
     where
@@ -319,7 +332,7 @@ calcOffsets xs = loop [0] xs
 putLoadTableIoctl :: Text -> Text -> [TableLine] -> Put
 putLoadTableIoctl name uuid ts = do
     putHeader hdr dataSize
-    mapM_ putTableLine (zip (calcOffsets $ map tlSectors ts) ts)
+    mapM_ putTargetSpec (zip (calcOffsets $ map tlSectors ts) ts)
     where
         hdr = defaultHeader {
             hdrName = name,
@@ -332,6 +345,23 @@ putLoadTableIoctl name uuid ts = do
 
 getLoadTableIoctl :: Get ()
 getLoadTableIoctl = return ()
+
+putStatusTableIoctl :: Text -> Text -> Int -> Put
+putStatusTableIoctl name uuid size = do
+    putHeader (devHeader name uuid 0) size
+    putZeroes size
+
+getStatusTableIoctl :: Get [TableLine]
+getStatusTableIoctl = do
+    hdr <- lookAhead getHeader
+    skip (fromIntegral $ hdrDataOffset hdr)
+    loop (hdrTargetCount hdr) []
+    where
+        loop 0 ts = return . reverse $ ts
+        loop n ts = do
+            (t, next) <- lookAhead getTargetSpec
+            skip next
+            loop (n - 1) (t : ts)
 
 traceIt :: (Show a) => a -> a
 traceIt x = trace (show x) x

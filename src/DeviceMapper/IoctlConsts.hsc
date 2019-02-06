@@ -16,6 +16,7 @@ module DeviceMapper.IoctlConsts (
     dmSuspendDeviceIoctl,
     dmLoadTableIoctl,
     dmClearTableIoctl,
+    dmStatusTableIoctl,
     dmBufferFullFlag,
     dmSuspendDeviceFlag,
     dmMaxTypeName,
@@ -75,6 +76,8 @@ dmLoadTableIoctl = #const DM_TABLE_LOAD
 dmClearTableIoctl :: CInt
 dmClearTableIoctl = #const DM_TABLE_CLEAR
 
+dmStatusTableIoctl :: CInt
+dmStatusTableIoctl = #const DM_TABLE_STATUS
 
 dmMaxTypeName :: CInt
 dmMaxTypeName = #const DM_MAX_TYPE_NAME
