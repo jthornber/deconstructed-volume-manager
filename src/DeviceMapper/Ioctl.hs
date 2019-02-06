@@ -10,7 +10,8 @@ module DeviceMapper.Ioctl (
     createDevice,
     removeDevice,
     suspendDevice,
-    resumeDevice
+    resumeDevice,
+    loadTable
     ) where
 
 import Control.Exception
@@ -126,6 +127,10 @@ suspendDevice name uuid ctrl =
 resumeDevice :: Text -> Text -> Fd -> IO (IoctlResult ())
 resumeDevice name uuid ctrl =
     runCmd ctrl dmSuspendDeviceIoctl (putResumeDeviceIoctl name uuid) getResumeDeviceIoctl
+
+loadTable :: Text -> Text -> [TableLine] -> Fd -> IO (IoctlResult ())
+loadTable name uuid ts ctrl =
+    runCmd ctrl dmLoadTableIoctl (putLoadTableIoctl name uuid ts) getLoadTableIoctl
 
 clearTable :: Text -> Text -> Fd -> IO (IoctlResult ())
 clearTable name uuid ctrl =

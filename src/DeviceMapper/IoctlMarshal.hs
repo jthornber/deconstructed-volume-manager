@@ -21,12 +21,16 @@ module DeviceMapper.IoctlMarshal (
     putResumeDeviceIoctl,
     getResumeDeviceIoctl,
 
+    putLoadTableIoctl,
+    getLoadTableIoctl,
+
     putClearTableIoctl,
     getClearTableIoctl,
 
     getEnoughSpace
     ) where
 
+import Debug.Trace
 import DeviceMapper.Types
 import DeviceMapper.IoctlConsts
 
@@ -85,6 +89,18 @@ getFixedWidthString n = getByteString n >>= (return . decodeBytes)
         decodeBytes = T.decodeUtf8 . BS.pack . trim . BS.unpack
         trim = reverse . takeWhile (/= 0) . reverse
 
+putCString :: Text -> PutM Int
+putCString txt = do
+    written <- loop 0 (T.unpack txt)
+    putWord8 0
+    return (written + 1)
+    where
+        -- FIXME: rewrite as a mapM_
+        loop written [] = return written
+        loop written (x:xs) = do
+            putWord8 (fromIntegral $ ord x)
+            loop (written + 1) xs
+
 getCString :: Get Text
 getCString = loop []
     where
@@ -119,7 +135,7 @@ putHeader hdr payloadLen = do
     putWord32host (hdrFlags hdr)
 
     putWord32host (hdrEvent hdr)
-    putWord32host padding
+    putWord32host 0
 
     putWord64host (hdrDev hdr)
 
@@ -132,7 +148,6 @@ putHeader hdr payloadLen = do
     where
         len = (fromIntegral payloadLen) + headerStructSize
         openCount = 0
-        padding = 0
 
 getHeader :: Get Header
 getHeader = do
@@ -274,5 +289,51 @@ putClearTableIoctl = putDev 0
 
 getClearTableIoctl :: Get ()
 getClearTableIoctl = return ()
+
+tlSectors :: TableLine -> Word64
+tlSectors (TableLine _ len _) = fromIntegral len
+
+roundUp n d = ((n + d - 1) `div` d) * d
+calcPadding n d = (roundUp n d) - n
+
+putTableLine :: (Word64, TableLine) -> Put
+putTableLine (sectorStart, TableLine kind sectorSize args) = do
+    putWord64host sectorStart
+    putWord64host $ fromIntegral sectorSize
+    putWord32host 0
+    putWord32host $ fromIntegral next
+    putFixedWidthString kind $ fromIntegral dmMaxTypeName
+    putCString args
+    putZeroes $ calcPadding argsLen 8
+    where
+        next = dmTargetSpecSize + fromIntegral (roundUp argsLen 8)
+        argsLen = T.length args + 1
+
+calcOffsets :: [Word64] -> [Word64]
+calcOffsets xs = loop [0] xs
+    where
+        loop acc [] = reverse acc
+        loop xs@(x:_) (y:ys) = loop (x + y : xs) ys
+        loop _ _ = error "can't happen"
+
+putLoadTableIoctl :: Text -> Text -> [TableLine] -> Put
+putLoadTableIoctl name uuid ts = do
+    putHeader hdr dataSize
+    mapM_ putTableLine (zip (calcOffsets $ map tlSectors ts) ts)
+    where
+        hdr = defaultHeader {
+            hdrName = name,
+            hdrUUID = uuid,
+            hdrTargetCount = fromIntegral $ length ts
+        }
+        offsets = reverse
+        dataSize = sum . map tlSize $ ts
+        tlSize (TableLine kind _ args) = (fromIntegral dmTargetSpecSize) + 64 + (T.length kind) + (T.length args)
+
+getLoadTableIoctl :: Get ()
+getLoadTableIoctl = return ()
+
+traceIt :: (Show a) => a -> a
+traceIt x = trace (show x) x
 
 ----------------------------------------

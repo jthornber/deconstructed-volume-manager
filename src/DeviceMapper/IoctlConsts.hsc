@@ -14,9 +14,12 @@ module DeviceMapper.IoctlConsts (
     dmCreateDeviceIoctl,
     dmRemoveDeviceIoctl,
     dmSuspendDeviceIoctl,
+    dmLoadTableIoctl,
     dmClearTableIoctl,
     dmBufferFullFlag,
-    dmSuspendDeviceFlag
+    dmSuspendDeviceFlag,
+    dmMaxTypeName,
+    dmTargetSpecSize
     ) where
 
 import Data.Word
@@ -66,13 +69,23 @@ dmRemoveDeviceIoctl = #const DM_DEV_REMOVE
 dmSuspendDeviceIoctl :: CInt
 dmSuspendDeviceIoctl = #const DM_DEV_SUSPEND
 
+dmLoadTableIoctl :: CInt
+dmLoadTableIoctl = #const DM_TABLE_LOAD
+
 dmClearTableIoctl :: CInt
 dmClearTableIoctl = #const DM_TABLE_CLEAR
+
+
+dmMaxTypeName :: CInt
+dmMaxTypeName = #const DM_MAX_TYPE_NAME
 
 dmBufferFullFlag :: Word32
 dmBufferFullFlag = #const DM_BUFFER_FULL_FLAG
 
 dmSuspendDeviceFlag :: Word32
 dmSuspendDeviceFlag = #const DM_SUSPEND_FLAG
+
+dmTargetSpecSize :: CInt
+dmTargetSpecSize = #const sizeof(struct dm_target_spec)
 
 -----------------------------------------------
