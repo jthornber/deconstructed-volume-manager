@@ -61,7 +61,7 @@ activateCmd _ = do
     putDocW 80 (indent 4 (I.prettyProgram $ deactivate dev))
     putStrLn ""
     where
-        dev = DMDevice (DeviceId (Just (T.pack "test1")) Nothing) table
+        dev = DMDevice (DeviceId {devName = (T.pack "test1"), devUUID = Nothing}) table
         table = Table [toTarget (Linear sda 0 1024),
                        toTarget (Linear sdb 0 1024)]
 

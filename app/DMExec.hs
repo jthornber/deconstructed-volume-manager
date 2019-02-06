@@ -23,6 +23,8 @@ errorTarget len = TableLine (T.pack "error") len (T.pack "")
 -- FIXME: we need a way of producing structured output (JSON)
 -- FIXME: switch to a Seq
 
+diUUID :: DeviceId -> Text
+diUUID = fromMaybe (T.pack "") . devUUID
 
 step :: Fd -> I.Instruction -> IO ()
 step ctrl = step'
@@ -35,25 +37,25 @@ step ctrl = step'
            listDevices ctrl
            return ()
        step' (I.Create devId) = do
-           createDevice (diName devId) (diUUID devId) ctrl
+           createDevice (devName devId) (diUUID devId) ctrl
            return ()
        step' (I.Remove devId) = do
-           removeDevice (diName devId) (diUUID devId) ctrl
+           removeDevice (devName devId) (diUUID devId) ctrl
            return ()
        step' (I.Suspend devId) = do
-           suspendDevice (diName devId) (diUUID devId) ctrl
+           suspendDevice (devName devId) (diUUID devId) ctrl
            return ()
        step' (I.Resume devId) = do
-           resumeDevice (diName devId) (diUUID devId) ctrl
+           resumeDevice (devName devId) (diUUID devId) ctrl
            return ()
        step' (I.Load devId table) = do
-           loadTable (diName devId) (diUUID devId) table ctrl
+           loadTable (devName devId) (diUUID devId) table ctrl
            return ()
        step' (I.Info devId) = do
-           statusTable (diName devId) (diUUID devId) ctrl
+           statusTable (devName devId) (diUUID devId) ctrl
            return ()
        step' (I.Table devId) = do
-           tableTable (diName devId) (diUUID devId) ctrl
+           tableTable (devName devId) (diUUID devId) ctrl
            return ()
 
 -- FIXME: print some execution stats
@@ -76,7 +78,7 @@ instructions = [
     I.Remove bar
     ]
     where
-        bar = DeviceId (Just (T.pack "bar")) Nothing
+        bar = DeviceId (T.pack "bar") Nothing
         table = [
             errorTarget 1024,
             errorTarget 4096]

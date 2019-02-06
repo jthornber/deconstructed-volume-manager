@@ -1,8 +1,6 @@
 module DeviceMapper.Types (
     Sector,
     DeviceId(..),
-    diName,
-    diUUID,
     DevicePath,
     Device(..),
     DeviceInfo(..),
@@ -26,18 +24,10 @@ import Data.Word
 type Sector = Integer
 type DevicePath = Text
 
-data DeviceId =
-    DeviceId (Maybe Text) (Maybe Text)
-    deriving (Eq, Show)
-
-emptyText :: Text
-emptyText = T.pack ""
-
-diName :: DeviceId -> Text
-diName (DeviceId mn _) = fromMaybe emptyText mn
-
-diUUID :: DeviceId -> Text
-diUUID (DeviceId _ mu) = fromMaybe emptyText mu
+data DeviceId = DeviceId {
+    devName :: Text,
+    devUUID :: Maybe Text
+} deriving (Eq, Show)
 
 data Device =
     DMDevice DeviceId Table |
@@ -51,7 +41,7 @@ data DeviceInfo = DeviceInfo {
 } deriving (Eq, Show)
 
 devPath :: Device -> Text
-devPath (DMDevice n _) = T.append (T.pack "/dev/mapper/") (diName n)
+devPath (DMDevice n _) = T.append (T.pack "/dev/mapper/") (devName n)
 devPath (ExternalDevice p) = p
 
 data TableLine = TableLine Text Sector Text deriving (Eq, Show)
