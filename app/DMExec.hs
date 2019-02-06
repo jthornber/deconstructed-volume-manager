@@ -26,37 +26,40 @@ errorTarget len = TableLine (T.pack "error") len (T.pack "")
 diUUID :: DeviceId -> Text
 diUUID = fromMaybe (T.pack "") . devUUID
 
+showResult :: (Show a) => String -> IoctlResult a -> IO ()
+showResult cmd r = putStrLn (cmd ++ ":\t" ++ (show r))
+
 step :: Fd -> I.Instruction -> IO ()
 step ctrl = step'
    where
        step' :: I.Instruction -> IO ()
        step' I.RemoveAll = do
-           removeAll ctrl
-           return ()
+           r <- removeAll ctrl
+           showResult "remove-all" r
        step' I.List = do
-           listDevices ctrl
-           return ()
+           r <- listDevices ctrl
+           showResult "list" r
        step' (I.Create devId) = do
-           createDevice (devName devId) (diUUID devId) ctrl
-           return ()
+           r <- createDevice (devName devId) (diUUID devId) ctrl
+           showResult "create" r
        step' (I.Remove devId) = do
-           removeDevice (devName devId) (diUUID devId) ctrl
-           return ()
+           r <- removeDevice (devName devId) (diUUID devId) ctrl
+           showResult "remove" r
        step' (I.Suspend devId) = do
-           suspendDevice (devName devId) (diUUID devId) ctrl
-           return ()
+           r <- suspendDevice (devName devId) (diUUID devId) ctrl
+           showResult "suspend" r
        step' (I.Resume devId) = do
-           resumeDevice (devName devId) (diUUID devId) ctrl
-           return ()
+           r <- resumeDevice (devName devId) (diUUID devId) ctrl
+           showResult "resume" r
        step' (I.Load devId table) = do
-           loadTable (devName devId) (diUUID devId) table ctrl
-           return ()
+           r <- loadTable (devName devId) (diUUID devId) table ctrl
+           showResult "load" r
        step' (I.Info devId) = do
-           statusTable (devName devId) (diUUID devId) ctrl
-           return ()
+           r <- statusTable (devName devId) (diUUID devId) ctrl
+           showResult "info" r
        step' (I.Table devId) = do
-           tableTable (devName devId) (diUUID devId) ctrl
-           return ()
+           r <- tableTable (devName devId) (diUUID devId) ctrl
+           showResult "table" r
 
 -- FIXME: print some execution stats
 exec :: [I.Instruction] -> IO ()
