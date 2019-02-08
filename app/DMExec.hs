@@ -1,7 +1,13 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module DMExec (
-    dmExecCmd
+        dmExecCmd
     ) where
 
+import Control.Applicative
+import Control.Lens
+import Control.Monad.State
+import Data.Array.IArray
 import Data.Maybe
 import qualified DeviceMapper.Instructions as I
 import DeviceMapper.Ioctl
@@ -9,85 +15,191 @@ import DeviceMapper.Types
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
+import System.Exit
 import System.Posix (Fd)
 
 -------------------------------------------
 
+-- The frame stack is a list of lists.  This let's us push a new frame at the
+-- start of a sub routine, and pop it at the end.
 
--- I think we need our own DMExec monad so we can
--- handle errors nicely
+data FStack = FStack {
+    frames :: [[Text]]
+} deriving (Eq, Show)
 
-errorTarget len = TableLine (T.pack "error") len (T.pack "")
+-- We always start with a frame
+newStack :: FStack
+newStack = FStack [[]]
+
+pushFrame :: FStack -> FStack
+pushFrame (FStack fs) = FStack ([] : fs)
+
+-- FIXME: get rid of these partial functions
+popFrame :: FStack -> FStack
+popFrame (FStack []) = error "No frame to pop frame from"
+popFrame (FStack (x:xs)) = FStack xs
+
+pushValue :: Text -> FStack -> FStack
+pushValue txt (FStack []) = error "No frame to push value to"
+pushValue txt (FStack (x:xs)) = FStack ((txt:x):xs)
+
+popValue :: FStack -> FStack
+popValue (FStack []) = error "No frame to pop value from"
+popValue (FStack ([]:xs)) = error "Frame is empty, so can't pop value"
+popValue (FStack ((x:xs):fs)) = FStack (xs:fs)
+
+-------------------------------------------
+
+data VMState = VMState {
+   _vmCtrl :: Fd,
+   _vmCode :: I.Program,
+   _vmPC :: I.Address,
+   _vmFrames :: FStack,
+   _vmValue :: Maybe Text
+}
+
+makeLenses ''VMState
+
+newState :: Fd -> I.Program -> VMState
+newState ctrl code = VMState {
+    _vmCtrl = ctrl,
+    _vmCode = code,
+    _vmPC = 0,
+    _vmFrames = newStack,
+    _vmValue = Nothing}
+
+type VM = StateT VMState IO
 
 -- FIXME: we need a way of producing structured output (JSON)
 -- FIXME: switch to a Seq
+-- FIXME: we need a way of iterating across all devices (eg, to get deps and tables)
 
 diUUID :: DeviceId -> Text
 diUUID = fromMaybe (T.pack "") . devUUID
 
-showResult :: (Show a) => String -> IoctlResult a -> IO ()
-showResult cmd r = putStrLn (cmd ++ ":\t" ++ (show r))
+{-
+-- FIXME: should we return Exit 0 if no more instructions?
+peekInstr :: VM I.Instruction
+peekInstr = do
+    vm <- get
+    return $ (vmCode vm) ! (vmPC vm)
 
-step :: Fd -> I.Instruction -> IO ()
-step ctrl = step'
-   where
-       step' :: I.Instruction -> IO ()
-       step' I.RemoveAll = do
-           r <- removeAll ctrl
-           showResult "remove-all" r
-       step' I.List = do
-           r <- listDevices ctrl
-           showResult "list" r
-       step' (I.Create devId) = do
-           r <- createDevice (devName devId) (diUUID devId) ctrl
-           showResult "create" r
-       step' (I.Remove devId) = do
-           r <- removeDevice (devName devId) (diUUID devId) ctrl
-           showResult "remove" r
-       step' (I.Suspend devId) = do
-           r <- suspendDevice (devName devId) (diUUID devId) ctrl
-           showResult "suspend" r
-       step' (I.Resume devId) = do
-           r <- resumeDevice (devName devId) (diUUID devId) ctrl
-           showResult "resume" r
-       step' (I.Load devId table) = do
-           r <- loadTable (devName devId) (diUUID devId) table ctrl
-           showResult "load" r
-       step' (I.Info devId) = do
-           r <- statusTable (devName devId) (diUUID devId) ctrl
-           showResult "info" r
-       step' (I.Table devId) = do
-           r <- tableTable (devName devId) (diUUID devId) ctrl
-           showResult "table" r
+-- FIXME: use lens library?
+vmIncPC :: VM ()
+vmIncPC = modify inc
+    where
+        inc vm = vm {vmPC = (vmPC vm) + 1}
+-}
+{-
+vmReadInstr :: VM I.Instruction
+vmReadInstr = do
+    vm <- get
+    let pc = (vmPC vm)
+        instr = (vmCode vm) ! pc
+    in do
+        put
+        -}
+
+codeLen :: I.Program -> I.Address
+codeLen code = (bounds code) ^. _2
+
+getCtrl :: VM Fd
+getCtrl = (^. vmCtrl) <$> get
+
+-- Returns (Exit 0) if no more instructions
+getInstr :: VM I.Instruction
+getInstr = do
+    vm <- get
+    let pc = (vm ^. vmPC) in
+        if pc >= (codeLen $ vm ^. vmCode)
+        then return $ I.Exit 0
+        else return $ (vm ^. vmCode) ! pc
+
+incPC :: VM ()
+incPC = modify (\vm -> vm & vmPC %~ (+ 1))
+
+nextInstr :: VM I.Instruction
+nextInstr = getInstr <* incPC
+
+dm :: (Fd -> IO (IoctlResult a)) -> VM (IoctlResult a)
+dm fn = getCtrl >>= (lift . fn)
+
+showResult :: (Show a) => String -> (Fd -> IO (IoctlResult a)) -> VM (Maybe Int)
+showResult desc fn = (dm fn) >>= printResult >> return Nothing
+    where
+        printResult r = lift $ putStrLn (desc ++ ":\t" ++ (show r))
+
+-- Returns the exit code if execution has completed.
+step' :: I.Instruction -> VM (Maybe Int)
+step' I.RemoveAll = showResult "remove-all" removeAll
+step' I.List = showResult "list" listDevices
+step' (I.Create devId) = showResult "create" $ createDevice (devName devId) (diUUID devId)
+step' (I.Remove devId) = showResult "remove" $ removeDevice (devName devId) (diUUID devId)
+step' (I.Suspend devId) = showResult "suspend" $ suspendDevice (devName devId) (diUUID devId)
+step' (I.Resume devId) = showResult "resume" $ resumeDevice (devName devId) (diUUID devId)
+step' (I.Load devId table) = showResult "load" $ loadTable (devName devId) (diUUID devId) table
+step' (I.Info devId) = showResult "info" $ statusTable (devName devId) (diUUID devId)
+step' (I.Table devId) = showResult "table" $ tableTable (devName devId) (diUUID devId)
+step' (I.Exit code) = return (Just code)
+step' _ = undefined
+
+{-
+step' Sub |
+Ret |
+Push |
+Pop |
+Print Text |
+Label Text |
+OnFail Text       step' (I.Print txt) = do
+   T.putStr txt
+   -}
+
+step :: VM (Maybe Int)
+step = (getInstr <* incPC) >>= step'
 
 -- FIXME: print some execution stats
-exec :: [I.Instruction] -> IO ()
-exec prg = withControlDevice $ \ctrl -> do
-    mapM_ (step ctrl) prg
+execCode :: VM Int
+execCode = do
+    mexit <- step
+    case mexit of
+        (Just code) -> return code
+        Nothing -> execCode
+
+runVM :: I.Program -> IO Int
+runVM code = withControlDevice $ \ctrl -> do
+    evalStateT execCode (newState ctrl code)
 
 --------------------------------------------------
 
-instructions :: [I.Instruction]
-instructions = [
-    I.RemoveAll,
-    I.Create bar,
-    I.Load bar table,
-    I.List,
-    I.Suspend bar,
-    I.Resume bar,
-    I.Table bar,
-    I.Info bar,
-    I.Remove bar
-    ]
+errorTarget len = TableLine (T.pack "error") len (T.pack "")
+
+instructions :: I.Program
+instructions = array (0, length ins) (zip [0..] ins)
     where
+        ins = [
+            I.RemoveAll,
+            I.Create bar,
+            I.Load bar table,
+            I.List,
+            I.Suspend bar,
+            I.Resume bar,
+            I.Table bar,
+            I.Info bar,
+            I.Remove bar
+            ]
         bar = DeviceId (T.pack "bar") Nothing
         table = [
             errorTarget 1024,
             errorTarget 4096]
 
-dmExecCmd :: [Text] -> IO ()
-dmExecCmd _ = exec instructions
+dmExecCmd :: [I.Instruction] -> IO ()
+dmExecCmd _ = do
+    code <- runVM instructions
+    case code of
+        0 -> exitSuccess
+        _ -> exitWith (ExitFailure code)
 
 {-
     withControlDevice $ \ctrl -> do

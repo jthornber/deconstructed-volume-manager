@@ -1,8 +1,12 @@
 module DeviceMapper.Instructions (
+    Address,
     Instruction(..),
+    Program,
     prettyInstruction,
     prettyProgram
     ) where
+
+import qualified Data.Array.IArray as A
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -10,8 +14,9 @@ import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util
 import DeviceMapper.Types
 
-type Index = Integer
+type Address = Int
 
+-- Do we need a long jump instruction that restores the frame stack?
 data Instruction =
     RemoveAll |
     List |
@@ -21,8 +26,17 @@ data Instruction =
     Resume DeviceId |
     Load DeviceId [TableLine] |
     Info DeviceId |
-    Table DeviceId
+    Table DeviceId |
+    Sub Address |
+    Ret |
+    Push |
+    Pop |
+    Print Text |
+    JmpFail Address |
+    Exit Int
     deriving (Show, Eq)
+
+type Program = A.Array Address Instruction
 
 showT = T.pack . show
 
