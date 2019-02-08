@@ -48,7 +48,7 @@ instance ToJSON DeviceInfo where
     toEncoding (DeviceInfo d n) = pairs ("dev" .= d <> "name" .= n)
 
 devPath :: Device -> Text
-devPath (DMDevice n _) = T.append (T.pack "/dev/mapper/") (devName n)
+devPath (DMDevice n _) = T.append "/dev/mapper/" (devName n)
 devPath (ExternalDevice p) = p
 
 data TableLine = TableLine Text Sector Text deriving (Eq, Show)
@@ -73,12 +73,7 @@ tableDeps = concatMap targetDeps . tableTargets
 
 -- FIXME: I don't think these belong here
 tableLinePrepare :: TableLine -> Text
-tableLinePrepare (TableLine n len txt) = T.concat [
-    n,
-    T.pack " ",
-    T.pack $ show len,
-    T.pack " ",
-    txt]
+tableLinePrepare (TableLine n len txt) = T.concat [n, " ", T.pack $ show len, " ", txt]
 
 tablePrepare :: Table -> [TableLine]
 tablePrepare = map targetLine . tableTargets

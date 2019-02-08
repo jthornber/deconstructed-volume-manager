@@ -1,5 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module DeviceMapper.IoctlMarshal (
-    Version(..),
+        Version(..),
     putVersionIoctl,
     getVersionIoctl,
 
@@ -207,8 +209,8 @@ defaultHeader = Header {
     hdrFlags = 0,
     hdrEvent = 0,
     hdrDev = 0,
-    hdrName = T.pack "",
-    hdrUUID = T.pack ""
+    hdrName = "",
+    hdrUUID = ""
 }
 
 putVersionIoctl :: Put
