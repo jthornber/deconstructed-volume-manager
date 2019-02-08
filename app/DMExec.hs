@@ -7,7 +7,9 @@ module DMExec (
 import Control.Applicative
 import Control.Lens
 import Control.Monad.State
+import Data.Aeson
 import Data.Array.IArray
+import qualified Data.ByteString.Lazy.Char8 as LS
 import Data.Maybe
 import qualified DeviceMapper.Instructions as I
 import DeviceMapper.Ioctl
@@ -15,6 +17,7 @@ import DeviceMapper.Types
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 
 import System.Exit
@@ -56,8 +59,7 @@ data VMState = VMState {
    _vmCtrl :: Fd,
    _vmCode :: I.Program,
    _vmPC :: I.Address,
-   _vmFrames :: FStack,
-   _vmValue :: Maybe Text
+   _vmFrames :: FStack
 }
 
 makeLenses ''VMState
@@ -67,8 +69,7 @@ newState ctrl code = VMState {
     _vmCtrl = ctrl,
     _vmCode = code,
     _vmPC = 0,
-    _vmFrames = newStack,
-    _vmValue = Nothing}
+    _vmFrames = newStack}
 
 type VM = StateT VMState IO
 
@@ -126,22 +127,29 @@ nextInstr = getInstr <* incPC
 dm :: (Fd -> IO (IoctlResult a)) -> VM (IoctlResult a)
 dm fn = getCtrl >>= (lift . fn)
 
-showResult :: (Show a) => String -> (Fd -> IO (IoctlResult a)) -> VM (Maybe Int)
-showResult desc fn = (dm fn) >>= printResult >> return Nothing
-    where
-        printResult r = lift $ putStrLn (desc ++ ":\t" ++ (show r))
+noResult :: (Fd -> IO (IoctlResult ())) -> VM (Maybe Int)
+noResult fn = (dm fn) >> return Nothing
+
+ppResult :: (ToJSON a) => (Fd -> IO (IoctlResult a)) -> VM (Maybe Int)
+ppResult fn = do
+    r <- dm fn
+    case r of
+        IoctlSuccess v -> do
+            lift (LS.putStrLn . encode $ v)
+            return Nothing
+        _ -> return Nothing
 
 -- Returns the exit code if execution has completed.
 step' :: I.Instruction -> VM (Maybe Int)
-step' I.RemoveAll = showResult "remove-all" removeAll
-step' I.List = showResult "list" listDevices
-step' (I.Create devId) = showResult "create" $ createDevice (devName devId) (diUUID devId)
-step' (I.Remove devId) = showResult "remove" $ removeDevice (devName devId) (diUUID devId)
-step' (I.Suspend devId) = showResult "suspend" $ suspendDevice (devName devId) (diUUID devId)
-step' (I.Resume devId) = showResult "resume" $ resumeDevice (devName devId) (diUUID devId)
-step' (I.Load devId table) = showResult "load" $ loadTable (devName devId) (diUUID devId) table
-step' (I.Info devId) = showResult "info" $ statusTable (devName devId) (diUUID devId)
-step' (I.Table devId) = showResult "table" $ tableTable (devName devId) (diUUID devId)
+step' I.RemoveAll = noResult removeAll
+step' I.List = ppResult listDevices
+step' (I.Create devId) = noResult $ createDevice (devName devId) (diUUID devId)
+step' (I.Remove devId) = noResult $ removeDevice (devName devId) (diUUID devId)
+step' (I.Suspend devId) = noResult $ suspendDevice (devName devId) (diUUID devId)
+step' (I.Resume devId) = noResult $ resumeDevice (devName devId) (diUUID devId)
+step' (I.Load devId table) = noResult $ loadTable (devName devId) (diUUID devId) table
+step' (I.Info devId) = ppResult $ statusTable (devName devId) (diUUID devId)
+step' (I.Table devId) = ppResult $ tableTable (devName devId) (diUUID devId)
 step' (I.Exit code) = return (Just code)
 step' _ = undefined
 

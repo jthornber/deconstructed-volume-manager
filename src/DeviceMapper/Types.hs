@@ -1,5 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module DeviceMapper.Types (
-    Sector,
+        Sector,
     DeviceId(..),
     DevicePath,
     Device(..),
@@ -14,6 +16,7 @@ module DeviceMapper.Types (
     ToTarget(..)
     ) where
 
+import Data.Aeson
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -40,11 +43,21 @@ data DeviceInfo = DeviceInfo {
     devInfoName :: Text
 } deriving (Eq, Show)
 
+instance ToJSON DeviceInfo where
+    toJSON (DeviceInfo d n) = object ["device" .= d, "name" .= n]
+    toEncoding (DeviceInfo d n) = pairs ("dev" .= d <> "name" .= n)
+
 devPath :: Device -> Text
 devPath (DMDevice n _) = T.append (T.pack "/dev/mapper/") (devName n)
 devPath (ExternalDevice p) = p
 
 data TableLine = TableLine Text Sector Text deriving (Eq, Show)
+
+instance ToJSON TableLine where
+    toJSON (TableLine kind len args) =
+        object ["type" .= kind, "size" .= len, "args" .= args]
+    toEncoding (TableLine kind len args) =
+        pairs ("type" .= kind <> "size" .= len <> "args" .= args)
 
 data Target = Target {
     targetLine :: TableLine,
