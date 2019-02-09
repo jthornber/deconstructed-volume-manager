@@ -1,13 +1,19 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+
 module DeviceMapper.Instructions (
     Address,
     Instruction(..),
-    Program,
-    prettyInstruction,
-    prettyProgram
+    Program(..),
+    programEntryPoint,
+    programInstructions
     ) where
 
 import qualified Data.Array.IArray as A
 
+import qualified Control.Lens as LENS
+import Data.Aeson
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Prettyprint.Doc
@@ -25,8 +31,8 @@ data Instruction =
     Suspend DeviceId |
     Resume DeviceId |
     Load DeviceId [TableLine] |
-    Info Text DeviceId |
-    Table Text DeviceId |
+    InfoQ Text DeviceId |
+    TableQ Text DeviceId |
     BeginObject Text |
     EndObject |
     Literal Text Text |
@@ -34,23 +40,30 @@ data Instruction =
     Exit Int
     deriving (Show, Eq)
 
-type Program = A.Array Address Instruction
+instance ToJSON Instruction where
+    toJSON RemoveAll = object ["instr" .= ("remove-all" :: Text)]
+    toJSON (List key) = object ["instr" .= ("list" :: Text), "key" .= key]
+    toJSON (Create dev) = object ["instr" .= ("create" :: Text), "id" .= dev]
+    toJSON (Remove dev) = object ["instr" .= ("remove" :: Text), "id" .= dev]
+    toJSON (Suspend dev) = object ["instr" .= ("suspend" :: Text), "id" .= dev]
+    toJSON (Resume dev) = object ["instr" .= ("resume" :: Text), "id" .= dev]
+    toJSON (Load dev tls) = object ["instr" .= ("load" :: Text), "id" .= dev, "targets" .= tls]
+    toJSON (InfoQ key dev) = object ["instr" .= ("info" :: Text), "id" .= dev, "key" .= key]
+    toJSON (TableQ key dev) = object ["instr" .= ("table" :: Text), "id" .= dev, "key" .= key]
+    toJSON (BeginObject key) = object ["instr" .= ("begin-object" :: Text), "key" .= key]
+    toJSON (EndObject) = object ["instr" .= ("end-object" :: Text)]
+    toJSON (Literal key val) = object ["instr" .= ("literal" :: Text), "key" .= key, "value" .= val]
+    toJSON (JmpFail addr) = object ["instr" .= ("jmp-fail" :: Text), "address" .= addr]
+    toJSON (Exit code) = object ["instr" .= ("exit" :: Text), "code" .= code]
 
-showT = T.pack . show
+data Program = Program {
+    _programEntryPoint :: Address,
+    _programInstructions :: A.Array Address Instruction
+}
 
-prettyInstruction :: Instruction -> Doc ()
-prettyInstruction (Suspend n) = pretty "suspend" <+> pretty (show n)
-prettyInstruction (Resume n) = pretty "resume" <+> pretty (show n)
-prettyInstruction (Load n ts) = hsep [
-    pretty "load",
-    pretty (show n),
-    hardline,
-    pretty "    " <> (align $ pretty (show ts))
-    ]
-prettyInstruction (Create n) = hsep . map pretty $ [T.pack "create", showT n]
-prettyInstruction (Remove n) = pretty "remove" <+> pretty (show n)
+LENS.makeLenses ''Program
 
--- FIXME: use a proper pretty printer
-prettyProgram :: [Instruction] -> Doc ()
-prettyProgram = vcat . map prettyInstruction
+instance ToJSON Program where
+    toJSON (Program pc i) = object ["entry-point" .= pc, "instructions" .= A.elems i]
+    toEncoding (Program pc i) = pairs ("entry-point" .= pc <> "instructions" .= A.elems i)
 

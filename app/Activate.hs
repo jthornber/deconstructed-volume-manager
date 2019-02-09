@@ -56,9 +56,9 @@ sdb = ExternalDevice (T.pack "/dev/sdb")
 activateCmd :: [Text] -> IO ()
 activateCmd _ = do
     putStrLn "ACTIVATE:"
-    putDocW 80 (indent 4 (I.prettyProgram $ activate dev))
+    -- putDocW 80 (indent 4 (I.prettyProgram $ activate dev))
     putStrLn "\n\nDEACTIVATE:"
-    putDocW 80 (indent 4 (I.prettyProgram $ deactivate dev))
+    -- putDocW 80 (indent 4 (I.prettyProgram $ deactivate dev))
     putStrLn ""
     where
         dev = DMDevice (DeviceId {devName = (T.pack "test1"), devUUID = Nothing}) table

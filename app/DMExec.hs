@@ -85,7 +85,7 @@ diUUID :: DeviceId -> Text
 diUUID = fromMaybe "" . devUUID
 
 codeLen :: I.Program -> I.Address
-codeLen code = (bounds code) ^. _2
+codeLen prog = (bounds (prog ^. I.programInstructions)) ^. _2
 
 getCtrl :: VM Fd
 getCtrl = (^. vmCtrl) <$> get
@@ -97,7 +97,7 @@ getInstr = do
     let pc = (vm ^. vmPC) in
         if pc >= (codeLen $ vm ^. vmCode)
         then return $ I.Exit 0
-        else return $ (vm ^. vmCode) ! pc
+        else return $ (vm ^. vmCode . I.programInstructions) ! pc
 
 incPC :: VM ()
 incPC = modify (\vm -> vm & vmPC %~ (+ 1))
@@ -132,8 +132,8 @@ step' (I.Remove devId) = noResult $ removeDevice (devName devId) (diUUID devId)
 step' (I.Suspend devId) = noResult $ suspendDevice (devName devId) (diUUID devId)
 step' (I.Resume devId) = noResult $ resumeDevice (devName devId) (diUUID devId)
 step' (I.Load devId table) = noResult $ loadTable (devName devId) (diUUID devId) table
-step' (I.Info key devId) = addResult key $ statusTable (devName devId) (diUUID devId)
-step' (I.Table key devId) = addResult key $ tableTable (devName devId) (diUUID devId)
+step' (I.InfoQ key devId) = addResult key $ statusTable (devName devId) (diUUID devId)
+step' (I.TableQ key devId) = addResult key $ tableTable (devName devId) (diUUID devId)
 step' (I.Exit code) = return (Just code)
 step' (I.BeginObject key) = return Nothing
 step' I.EndObject = return Nothing
@@ -159,8 +159,10 @@ runVM code = withControlDevice $ \ctrl -> do
 
 errorTarget len = TableLine "error" len ""
 
-instructions :: I.Program
-instructions = array (0, length ins) (zip [0..] ins)
+program :: I.Program
+program = I.Program {
+    I._programEntryPoint = 0,
+    I._programInstructions = array (0, (length ins) - 1) (zip [0..] ins)}
     where
         ins = [
             I.RemoveAll,
@@ -169,8 +171,8 @@ instructions = array (0, length ins) (zip [0..] ins)
             I.List "list",
             I.Suspend bar,
             I.Resume bar,
-            I.Table "bar-table" bar,
-            I.Info "bar-info" bar,
+            I.TableQ "bar-table" bar,
+            I.InfoQ "bar-info" bar,
             I.Remove bar,
             I.Exit 17
             ]
@@ -179,9 +181,10 @@ instructions = array (0, length ins) (zip [0..] ins)
             errorTarget 1024,
             errorTarget 4096]
 
-dmExecCmd :: [I.Instruction] -> IO ()
+dmExecCmd :: [Text] -> IO ()
 dmExecCmd _ = do
-    (exitCode, obj) <- runVM instructions
+    LS.putStrLn . encode $ program
+    (exitCode, obj) <- runVM program
     LS.putStrLn . encode $ obj
     case exitCode of
         0 -> exitSuccess

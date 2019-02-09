@@ -32,6 +32,9 @@ data DeviceId = DeviceId {
     devUUID :: Maybe Text
 } deriving (Eq, Show)
 
+instance ToJSON DeviceId where
+    toJSON (DeviceId n u) = object ["name" .= n, "uuid" .= u]
+
 data Device =
     DMDevice DeviceId Table |
     ExternalDevice DevicePath
