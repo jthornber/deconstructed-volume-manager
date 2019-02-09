@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module DMExec (
         dmExecCmd
@@ -10,6 +11,7 @@ import Control.Monad.State
 import Data.Aeson
 import Data.Array.IArray
 import qualified Data.ByteString.Lazy.Char8 as LS
+import qualified Data.HashMap.Strict as H
 import Data.Maybe
 import qualified DeviceMapper.Instructions as I
 import DeviceMapper.Ioctl
@@ -59,7 +61,8 @@ data VMState = VMState {
    _vmCtrl :: Fd,
    _vmCode :: I.Program,
    _vmPC :: I.Address,
-   _vmFrames :: FStack
+   _vmFrames :: FStack,
+   _vmObj :: Object
 }
 
 makeLenses ''VMState
@@ -69,7 +72,8 @@ newState ctrl code = VMState {
     _vmCtrl = ctrl,
     _vmCode = code,
     _vmPC = 0,
-    _vmFrames = newStack}
+    _vmFrames = newStack,
+    _vmObj = H.empty}
 
 type VM = StateT VMState IO
 
@@ -78,30 +82,7 @@ type VM = StateT VMState IO
 -- FIXME: we need a way of iterating across all devices (eg, to get deps and tables)
 
 diUUID :: DeviceId -> Text
-diUUID = fromMaybe (T.pack "") . devUUID
-
-{-
--- FIXME: should we return Exit 0 if no more instructions?
-peekInstr :: VM I.Instruction
-peekInstr = do
-    vm <- get
-    return $ (vmCode vm) ! (vmPC vm)
-
--- FIXME: use lens library?
-vmIncPC :: VM ()
-vmIncPC = modify inc
-    where
-        inc vm = vm {vmPC = (vmPC vm) + 1}
--}
-{-
-vmReadInstr :: VM I.Instruction
-vmReadInstr = do
-    vm <- get
-    let pc = (vmPC vm)
-        instr = (vmCode vm) ! pc
-    in do
-        put
-        -}
+diUUID = fromMaybe "" . devUUID
 
 codeLen :: I.Program -> I.Address
 codeLen code = (bounds code) ^. _2
@@ -121,6 +102,9 @@ getInstr = do
 incPC :: VM ()
 incPC = modify (\vm -> vm & vmPC %~ (+ 1))
 
+setPC :: I.Address -> VM ()
+setPC pc = modify (\vm -> vm & vmPC ^~ pc)
+
 nextInstr :: VM I.Instruction
 nextInstr = getInstr <* incPC
 
@@ -130,41 +114,32 @@ dm fn = getCtrl >>= (lift . fn)
 noResult :: (Fd -> IO (IoctlResult ())) -> VM (Maybe Int)
 noResult fn = (dm fn) >> return Nothing
 
-ppResult :: (ToJSON a) => (Fd -> IO (IoctlResult a)) -> VM (Maybe Int)
-ppResult fn = do
+addResult :: (ToJSON a) => Text -> (Fd -> IO (IoctlResult a)) -> VM (Maybe Int)
+addResult key fn = do
     r <- dm fn
     case r of
         IoctlSuccess v -> do
-            lift (LS.putStrLn . encode $ v)
+            modify (\vm -> vm & vmObj %~ (H.insert key (toJSON v)))
             return Nothing
         _ -> return Nothing
 
 -- Returns the exit code if execution has completed.
 step' :: I.Instruction -> VM (Maybe Int)
 step' I.RemoveAll = noResult removeAll
-step' I.List = ppResult listDevices
+step' (I.List key) = addResult key listDevices
 step' (I.Create devId) = noResult $ createDevice (devName devId) (diUUID devId)
 step' (I.Remove devId) = noResult $ removeDevice (devName devId) (diUUID devId)
 step' (I.Suspend devId) = noResult $ suspendDevice (devName devId) (diUUID devId)
 step' (I.Resume devId) = noResult $ resumeDevice (devName devId) (diUUID devId)
 step' (I.Load devId table) = noResult $ loadTable (devName devId) (diUUID devId) table
-step' (I.Info devId) = ppResult $ statusTable (devName devId) (diUUID devId)
-step' (I.Table devId) = ppResult $ tableTable (devName devId) (diUUID devId)
+step' (I.Info key devId) = addResult key $ statusTable (devName devId) (diUUID devId)
+step' (I.Table key devId) = addResult key $ tableTable (devName devId) (diUUID devId)
 step' (I.Exit code) = return (Just code)
-step' _ = undefined
+step' (I.BeginObject key) = return Nothing
+step' I.EndObject = return Nothing
+step' (I.Literal key val) = return Nothing
+step' (I.JmpFail pc) = setPC pc >> return Nothing
 
-{-
-step' Sub |
-Ret |
-Push |
-Pop |
-Print Text |
-Label Text |
-OnFail Text       step' (I.Print txt) = do
-   T.putStr txt
-   -}
-
-step :: VM (Maybe Int)
 step = (getInstr <* incPC) >>= step'
 
 -- FIXME: print some execution stats
@@ -175,13 +150,14 @@ execCode = do
         (Just code) -> return code
         Nothing -> execCode
 
-runVM :: I.Program -> IO Int
+runVM :: I.Program -> IO (Int, Value)
 runVM code = withControlDevice $ \ctrl -> do
-    evalStateT execCode (newState ctrl code)
+    (exitCode, vm) <- runStateT execCode (newState ctrl code)
+    return (exitCode, Object $ vm ^. vmObj)
 
 --------------------------------------------------
 
-errorTarget len = TableLine (T.pack "error") len (T.pack "")
+errorTarget len = TableLine "error" len ""
 
 instructions :: I.Program
 instructions = array (0, length ins) (zip [0..] ins)
@@ -190,46 +166,25 @@ instructions = array (0, length ins) (zip [0..] ins)
             I.RemoveAll,
             I.Create bar,
             I.Load bar table,
-            I.List,
+            I.List "list",
             I.Suspend bar,
             I.Resume bar,
-            I.Table bar,
-            I.Info bar,
-            I.Remove bar
+            I.Table "bar-table" bar,
+            I.Info "bar-info" bar,
+            I.Remove bar,
+            I.Exit 17
             ]
-        bar = DeviceId (T.pack "bar") Nothing
+        bar = DeviceId "bar" Nothing
         table = [
             errorTarget 1024,
             errorTarget 4096]
 
 dmExecCmd :: [I.Instruction] -> IO ()
 dmExecCmd _ = do
-    code <- runVM instructions
-    case code of
+    (exitCode, obj) <- runVM instructions
+    LS.putStrLn . encode $ obj
+    case exitCode of
         0 -> exitSuccess
-        _ -> exitWith (ExitFailure code)
-
-{-
-    withControlDevice $ \ctrl -> do
-        removeAll ctrl
-        createDevice name uuid ctrl
-        loadTable name uuid [errorTarget 1024, errorTarget 4096] ctrl
-        r <- listDevices ctrl
-        putStrLn . show $ r
-        suspendDevice name uuid ctrl
-        resumeDevice name uuid ctrl
-
-        table <- tableTable name uuid ctrl
-        putStrLn . show $ table
-
-        status <- statusTable name uuid ctrl
-        putStrLn . show $ status
-
-        removeDevice name uuid ctrl
-        return ()
-    where
-        name = T.pack "bar"
-        uuid = T.pack ""
-        -}
+        _ -> exitWith (ExitFailure exitCode)
 
 -------------------------------------------

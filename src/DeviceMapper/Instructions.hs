@@ -19,19 +19,17 @@ type Address = Int
 -- Do we need a long jump instruction that restores the frame stack?
 data Instruction =
     RemoveAll |
-    List |
+    List Text |
     Create DeviceId |
     Remove DeviceId |
     Suspend DeviceId |
     Resume DeviceId |
     Load DeviceId [TableLine] |
-    Info DeviceId |
-    Table DeviceId |
-    Sub Address |
-    Ret |
-    Push |
-    Pop |
-    Print Text |
+    Info Text DeviceId |
+    Table Text DeviceId |
+    BeginObject Text |
+    EndObject |
+    Literal Text Text |
     JmpFail Address |
     Exit Int
     deriving (Show, Eq)
