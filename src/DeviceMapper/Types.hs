@@ -33,7 +33,11 @@ data DeviceId = DeviceId {
 } deriving (Eq, Show)
 
 instance ToJSON DeviceId where
-    toJSON (DeviceId n u) = object ["name" .= n, "uuid" .= u]
+    toJSON (DeviceId n u) = object $ ["name" .= n] ++ uuid
+        where
+            uuid = if isJust u
+                   then ["uuid" .= fromJust u]
+                   else []
 
 data Device =
     DMDevice DeviceId Table |

@@ -14,6 +14,7 @@ import qualified Data.Array.IArray as A
 
 import qualified Control.Lens as LENS
 import Data.Aeson
+import Data.Aeson.Types (Pair)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Prettyprint.Doc
@@ -40,21 +41,24 @@ data Instruction =
     Exit Int
     deriving (Show, Eq)
 
+op :: Text -> [Pair] -> Value
+op opcode fields = object $ ["op" .= opcode] ++ fields
+
 instance ToJSON Instruction where
-    toJSON RemoveAll = object ["instr" .= ("remove-all" :: Text)]
-    toJSON (List key) = object ["instr" .= ("list" :: Text), "key" .= key]
-    toJSON (Create dev) = object ["instr" .= ("create" :: Text), "id" .= dev]
-    toJSON (Remove dev) = object ["instr" .= ("remove" :: Text), "id" .= dev]
-    toJSON (Suspend dev) = object ["instr" .= ("suspend" :: Text), "id" .= dev]
-    toJSON (Resume dev) = object ["instr" .= ("resume" :: Text), "id" .= dev]
-    toJSON (Load dev tls) = object ["instr" .= ("load" :: Text), "id" .= dev, "targets" .= tls]
-    toJSON (InfoQ key dev) = object ["instr" .= ("info" :: Text), "id" .= dev, "key" .= key]
-    toJSON (TableQ key dev) = object ["instr" .= ("table" :: Text), "id" .= dev, "key" .= key]
-    toJSON (BeginObject key) = object ["instr" .= ("begin-object" :: Text), "key" .= key]
-    toJSON (EndObject) = object ["instr" .= ("end-object" :: Text)]
-    toJSON (Literal key val) = object ["instr" .= ("literal" :: Text), "key" .= key, "value" .= val]
-    toJSON (JmpFail addr) = object ["instr" .= ("jmp-fail" :: Text), "address" .= addr]
-    toJSON (Exit code) = object ["instr" .= ("exit" :: Text), "code" .= code]
+    toJSON RemoveAll = op "remove-all" []
+    toJSON (List key) = op "list" ["key" .= key]
+    toJSON (Create dev) = op "create" ["id" .= dev]
+    toJSON (Remove dev) = op "remove" ["id" .= dev]
+    toJSON (Suspend dev) = op "suspend" ["id" .= dev]
+    toJSON (Resume dev) = op "resume" ["id" .= dev]
+    toJSON (Load dev tls) = op "load" ["id" .= dev, "targets" .= tls]
+    toJSON (InfoQ key dev) = op "info" ["id" .= dev, "key" .= key]
+    toJSON (TableQ key dev) = op "table" ["id" .= dev, "key" .= key]
+    toJSON (BeginObject key) = op "begin-object" ["key" .= key]
+    toJSON (EndObject) = op "end-object" []
+    toJSON (Literal key val) = op "literal" ["key" .= key, "value" .= val]
+    toJSON (JmpFail addr) = op "jmp-fail" ["address" .= addr]
+    toJSON (Exit code) = op "exit" ["code" .= code]
 
 data Program = Program {
     _programEntryPoint :: Address,
