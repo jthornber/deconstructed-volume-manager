@@ -160,9 +160,7 @@ runVM code = withControlDevice $ \ctrl -> do
 errorTarget len = TableLine "error" len ""
 
 program :: I.Program
-program = I.Program {
-    I._programEntryPoint = 0,
-    I._programInstructions = array (0, (length ins) - 1) (zip [0..] ins)}
+program = I.mkProgram 0 ins
     where
         ins = [
             I.RemoveAll,

@@ -16,7 +16,9 @@ module DeviceMapper.Types (
     ToTarget(..)
     ) where
 
+import Control.Monad
 import Data.Aeson
+import Data.Aeson.Types
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -38,6 +40,10 @@ instance ToJSON DeviceId where
             uuid = if isJust u
                    then ["uuid" .= fromJust u]
                    else []
+
+instance FromJSON DeviceId where
+    parseJSON (Object v) = DeviceId <$> v .: "name" <*> v .:? "uuid"
+    parseJSON _ = mzero
 
 data Device =
     DMDevice DeviceId Table |
@@ -65,6 +71,10 @@ instance ToJSON TableLine where
         object ["type" .= kind, "size" .= len, "args" .= args]
     toEncoding (TableLine kind len args) =
         pairs ("type" .= kind <> "size" .= len <> "args" .= args)
+
+instance FromJSON TableLine where
+    parseJSON (Object v) = TableLine <$> v .: "type" <*> v .: "size" <*> v .: "args"
+    parseJSON _ = mzero
 
 data Target = Target {
     targetLine :: TableLine,
