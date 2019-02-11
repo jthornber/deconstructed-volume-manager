@@ -39,7 +39,9 @@ data Instruction =
     BeginObject |
     EndObject Text |
     Literal Text Text |
-    JmpFail Address |
+    Jmp Text |
+    JmpFail Text |
+    Label Text |
     Exit Int
     deriving (Show, Eq)
 
@@ -59,7 +61,9 @@ instance ToJSON Instruction where
     toJSON BeginObject = op "begin-object" []
     toJSON (EndObject key) = op "end-object" ["key" .= key]
     toJSON (Literal key val) = op "literal" ["key" .= key, "value" .= val]
-    toJSON (JmpFail addr) = op "jmp-fail" ["address" .= addr]
+    toJSON (Jmp label) = op "jmp" ["label" .= label]
+    toJSON (JmpFail label) = op "jmp-fail" ["label" .= label]
+    toJSON (Label name) = op "label" ["name" .= name]
     toJSON (Exit code) = op "exit" ["code" .= code]
 
 getOp :: Object -> Parser Text
@@ -81,7 +85,9 @@ instance FromJSON Instruction where
             "begin-object" -> return BeginObject
             "end-object" -> EndObject <$> v .: "key"
             "literal" -> Literal <$> v .: "key" <*> v .: "value"
-            "jmp-fail" -> JmpFail <$> v .: "address"
+            "jmp" -> Jmp <$> v .: "label"
+            "jmp-fail" -> JmpFail <$> v .: "label"
+            "label" -> Label <$> v .: "name"
             "exit" -> Exit <$> v .: "code"
     parseJSON _ = mzero
 

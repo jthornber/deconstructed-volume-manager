@@ -29,41 +29,12 @@ import System.Posix (Fd)
 
 -------------------------------------------
 
--- The frame stack is a list of lists.  This let's us push a new frame at the
--- start of a sub routine, and pop it at the end.
-
-data FStack = FStack {
-    frames :: [[Text]]
-} deriving (Eq, Show)
-
--- We always start with a frame
-newStack :: FStack
-newStack = FStack [[]]
-
-pushFrame :: FStack -> FStack
-pushFrame (FStack fs) = FStack ([] : fs)
-
--- FIXME: get rid of these partial functions
-popFrame :: FStack -> FStack
-popFrame (FStack []) = error "No frame to pop frame from"
-popFrame (FStack (x:xs)) = FStack xs
-
-pushValue :: Text -> FStack -> FStack
-pushValue txt (FStack []) = error "No frame to push value to"
-pushValue txt (FStack (x:xs)) = FStack ((txt:x):xs)
-
-popValue :: FStack -> FStack
-popValue (FStack []) = error "No frame to pop value from"
-popValue (FStack ([]:xs)) = error "Frame is empty, so can't pop value"
-popValue (FStack ((x:xs):fs)) = FStack (xs:fs)
-
--------------------------------------------
-
 data VMState = VMState {
    _vmCtrl :: Fd,
    _vmCode :: I.Program,
    _vmPC :: I.Address,
-   _vmFrames :: FStack,
+   _vmLabels :: H.HashMap Text I.Address,
+   _vmLastIoctlFailed :: Bool,
 
    -- This is a stack of objects, pairs are added to the head
    _vmObj :: [Object]
@@ -76,8 +47,14 @@ newState ctrl code = VMState {
     _vmCtrl = ctrl,
     _vmCode = code,
     _vmPC = 0,
-    _vmFrames = newStack,
+    _vmLabels = labels,
+    _vmLastIoctlFailed = False,
     _vmObj = [H.empty]}
+    where
+        labels = foldr isLabel H.empty (zip (elems $ code ^. I.programInstructions) [0..])
+
+        isLabel (I.Label name, pc) zero = H.insert name pc zero
+        isLabel _ zero = zero
 
 type VM = StateT VMState IO
 
@@ -107,13 +84,30 @@ incPC :: VM ()
 incPC = modify (\vm -> vm & vmPC %~ (+ 1))
 
 setPC :: I.Address -> VM ()
-setPC pc = modify (\vm -> vm & vmPC ^~ pc)
+setPC pc = modify (\vm -> vm & vmPC .~ pc)
+
+jmpLabel :: Text -> VM (Maybe Int)
+jmpLabel name = do
+    vm <- get
+    case H.lookup name (vm ^. vmLabels) of
+        Nothing -> error "no such label"
+        Just pc -> do
+            setPC pc
+            return Nothing
 
 nextInstr :: VM I.Instruction
 nextInstr = getInstr <* incPC
 
 dm :: (Fd -> IO (IoctlResult a)) -> VM (IoctlResult a)
-dm fn = getCtrl >>= (lift . fn)
+dm fn = do
+    dmResult <- getCtrl >>= (lift . fn)
+    case dmResult of
+        IoctlSuccess _ -> do
+            modify (\vm -> vm & vmLastIoctlFailed .~ False)
+            return dmResult
+        _ -> do
+            modify (\vm -> vm & vmLastIoctlFailed .~ True)
+            return dmResult
 
 noResult :: (Fd -> IO (IoctlResult ())) -> VM (Maybe Int)
 noResult fn = (dm fn) >> return Nothing
@@ -161,8 +155,17 @@ step' (I.EndObject key) = do
 step' (I.Literal key val) = do
     modify $ \vm -> vm & vmObj %~ insertPair key (toJSON val)
     return Nothing
-step' (I.JmpFail pc) = setPC pc >> return Nothing
+step' (I.Jmp label) = jmpLabel label
+step' (I.JmpFail name) = do
+    vm <- get
+    if vm ^. vmLastIoctlFailed
+    then jmpLabel name
+    else return Nothing
 
+step' (I.Label _) = return Nothing
+
+-- FIXME: we need a way of reporting the ioctl error codes
+step :: VM (Maybe Int)
 step = (getInstr <* incPC) >>= step'
 
 -- FIXME: print some execution stats
@@ -187,20 +190,21 @@ usage = do
     hPutStrLn stderr "usage: dmexec <program file>"
     return $ ExitFailure 1
 
-readProgram :: FilePath -> IO (Maybe I.Program)
-readProgram path = LS.readFile path >>= (return . decode)
+readProgram :: FilePath -> IO (Either String I.Program)
+readProgram path = LS.readFile path >>= (return . eitherDecode)
 
 dmExecCmd :: [Text] -> IO ExitCode
 dmExecCmd args = do
     if length args /= 1
     then usage
     else do
-        mprg<- readProgram . T.unpack . head $ args
-        case mprg of
-            Nothing -> do
-                hPutStrLn stderr "Invalid program"
+        eprg <- readProgram . T.unpack . head $ args
+        case eprg of
+            Left err -> do
+                hPutStr stderr "Invalid program: "
+                hPutStrLn stderr err
                 return $ ExitFailure 1
-            Just program -> do
+            Right program -> do
                 (exitCode, obj) <- runVM program
                 LS.putStrLn . encodePretty $ obj
                 if exitCode == 0
