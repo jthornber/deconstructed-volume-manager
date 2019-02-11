@@ -1,72 +1,24 @@
 {
     "instructions": [
-        {
-            "op": "remove-all"
-        },
-        {
-            "op": "create",
-            "id": {
-                "name": "bar"
-            }
-        },
+        { "op": "remove-all" },
+        { "op": "create", "id": { "name": "bar" } },
         {
             "op": "load",
             "targets": [
-                {
-                    "args": "",
-                    "size": 1024,
-                    "type": "error"
-                },
-                {
-                    "args": "",
-                    "size": 4096,
-                    "type": "error"
-                }
+                { "args": "", "size": 1024, "type": "error" },
+                { "args": "", "size": 4096, "type": "error" }
             ],
-            "id": {
-                "name": "bar"
-            }
+            "id": { "name": "bar" }
         },
-        {
-            "op": "list",
-            "key": "list"
-        },
-        {
-            "op": "suspend",
-            "id": {
-                "name": "bar"
-            }
-        },
-        {
-            "op": "resume",
-            "id": {
-                "name": "bar"
-            }
-        },
-        {
-            "op": "table",
-            "key": "bar-table",
-            "id": {
-                "name": "bar"
-            }
-        },
-        {
-            "op": "info",
-            "key": "bar-info",
-            "id": {
-                "name": "bar"
-            }
-        },
-        {
-            "op": "remove",
-            "id": {
-                "name": "bar"
-            }
-        },
-        {
-            "op": "exit",
-            "code": 17
-        }
+        { "op": "list", "key": "list" },
+        { "op": "suspend", "id": { "name": "bar" } },
+        { "op": "resume", "id": { "name": "bar" } },
+	{ "op": "begin-object" },
+        { "op": "table", "key": "table", "id": { "name": "bar" } },
+        { "op": "info", "key": "info", "id": { "name": "bar" } },
+	{ "op": "end-object", "key": "bar" },
+        { "op": "remove", "id": { "name": "bar" } },
+        { "op": "exit", "code": 17 }
     ],
     "entry-point": 0
 }

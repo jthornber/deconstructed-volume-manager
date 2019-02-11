@@ -64,7 +64,9 @@ data VMState = VMState {
    _vmCode :: I.Program,
    _vmPC :: I.Address,
    _vmFrames :: FStack,
-   _vmObj :: Object
+
+   -- This is a stack of objects, pairs are added to the head
+   _vmObj :: [Object]
 }
 
 makeLenses ''VMState
@@ -75,7 +77,7 @@ newState ctrl code = VMState {
     _vmCode = code,
     _vmPC = 0,
     _vmFrames = newStack,
-    _vmObj = H.empty}
+    _vmObj = [H.empty]}
 
 type VM = StateT VMState IO
 
@@ -97,7 +99,7 @@ getInstr :: VM I.Instruction
 getInstr = do
     vm <- get
     let pc = (vm ^. vmPC) in
-        if pc >= (codeLen $ vm ^. vmCode)
+        if pc > (codeLen $ vm ^. vmCode)
         then return $ I.Exit 0
         else return $ (vm ^. vmCode . I.programInstructions) ! pc
 
@@ -116,14 +118,27 @@ dm fn = getCtrl >>= (lift . fn)
 noResult :: (Fd -> IO (IoctlResult ())) -> VM (Maybe Int)
 noResult fn = (dm fn) >> return Nothing
 
+-- FIXME: handle error
+insertPair :: Text -> Value -> [Object] -> [Object]
+insertPair _ _ [] = error "can't insert pair"
+insertPair k v (o:os) = (H.insert k v o) : os
+
 addResult :: (ToJSON a) => Text -> (Fd -> IO (IoctlResult a)) -> VM (Maybe Int)
 addResult key fn = do
     r <- dm fn
     case r of
         IoctlSuccess v -> do
-            modify (\vm -> vm & vmObj %~ (H.insert key (toJSON v)))
+            modify (\vm -> vm & vmObj %~ insertPair key (toJSON v))
             return Nothing
         _ -> return Nothing
+
+pushObject :: [Object] -> [Object]
+pushObject os = H.empty : os
+
+-- FIXME: this error should be propogated
+popObject :: Text -> [Object] -> [Object]
+popObject _ [_] = error "can't pop object"
+popObject key (v:o:os) = (H.insert key (Object v) o) : os
 
 -- Returns the exit code if execution has completed.
 step' :: I.Instruction -> VM (Maybe Int)
@@ -137,9 +152,15 @@ step' (I.Load devId table) = noResult $ loadTable (devName devId) (diUUID devId)
 step' (I.InfoQ key devId) = addResult key $ statusTable (devName devId) (diUUID devId)
 step' (I.TableQ key devId) = addResult key $ tableTable (devName devId) (diUUID devId)
 step' (I.Exit code) = return (Just code)
-step' (I.BeginObject key) = return Nothing
-step' I.EndObject = return Nothing
-step' (I.Literal key val) = return Nothing
+step' I.BeginObject = do
+    modify $ \vm -> vm & vmObj %~ pushObject
+    return Nothing
+step' (I.EndObject key) = do
+    modify $ \vm -> vm & vmObj %~ popObject key
+    return Nothing
+step' (I.Literal key val) = do
+    modify $ \vm -> vm & vmObj %~ insertPair key (toJSON val)
+    return Nothing
 step' (I.JmpFail pc) = setPC pc >> return Nothing
 
 step = (getInstr <* incPC) >>= step'
@@ -155,7 +176,7 @@ execCode = do
 runVM :: I.Program -> IO (Int, Value)
 runVM code = withControlDevice $ \ctrl -> do
     (exitCode, vm) <- runStateT execCode (newState ctrl code)
-    return (exitCode, Object $ vm ^. vmObj)
+    return (exitCode, Object . head $ vm ^. vmObj)
 
 --------------------------------------------------
 

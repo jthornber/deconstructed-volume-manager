@@ -36,8 +36,8 @@ data Instruction =
     Load DeviceId [TableLine] |
     InfoQ Text DeviceId |
     TableQ Text DeviceId |
-    BeginObject Text |
-    EndObject |
+    BeginObject |
+    EndObject Text |
     Literal Text Text |
     JmpFail Address |
     Exit Int
@@ -56,8 +56,8 @@ instance ToJSON Instruction where
     toJSON (Load dev tls) = op "load" ["id" .= dev, "targets" .= tls]
     toJSON (InfoQ key dev) = op "info" ["id" .= dev, "key" .= key]
     toJSON (TableQ key dev) = op "table" ["id" .= dev, "key" .= key]
-    toJSON (BeginObject key) = op "begin-object" ["key" .= key]
-    toJSON (EndObject) = op "end-object" []
+    toJSON BeginObject = op "begin-object" []
+    toJSON (EndObject key) = op "end-object" ["key" .= key]
     toJSON (Literal key val) = op "literal" ["key" .= key, "value" .= val]
     toJSON (JmpFail addr) = op "jmp-fail" ["address" .= addr]
     toJSON (Exit code) = op "exit" ["code" .= code]
@@ -78,8 +78,8 @@ instance FromJSON Instruction where
             "load" -> Load <$> v .: "id" <*> v .: "targets"
             "info" -> InfoQ <$> v .: "key" <*> v .: "id"
             "table" -> TableQ <$> v .: "key" <*> v .: "id"
-            "begin-object" -> BeginObject <$> v .: "key"
-            "end-object" -> return EndObject
+            "begin-object" -> return BeginObject
+            "end-object" -> EndObject <$> v .: "key"
             "literal" -> Literal <$> v .: "key" <*> v .: "value"
             "jmp-fail" -> JmpFail <$> v .: "address"
             "exit" -> Exit <$> v .: "code"

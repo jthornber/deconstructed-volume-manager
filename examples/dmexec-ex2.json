@@ -1,0 +1,10 @@
+{
+    "instructions": [
+        { "op": "begin-object" },
+	{ "op": "literal", "key": "k1", "value": "val1" },
+	{ "op": "literal", "key": "k2", "value": "val2" },
+	{ "op": "end-object", "key": "sub" }
+    ],
+    "entry-point": 0
+}
+
