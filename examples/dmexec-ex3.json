@@ -17,11 +17,11 @@
 	{ "op": "table", "key": "table", "id": { "name": "bar" } },
 	{ "op": "jmp-fail", "label": "bar-fail" },
 
-	{ "op": "literal", "key": "table", "value": "success" },
+	{ "op": "literal", "key": "result", "value": "success" },
 	{ "op": "jmp", "label": "bar-out" },
 
 	{ "op": "label", "name": "bar-fail" },
-	{ "op": "literal", "key": "table", "value": "fail" },
+	{ "op": "literal", "key": "result", "value": "fail" },
 
 	{ "op": "label", "name": "bar-out" },
 	{ "op": "end-object", "key": "bar" },
@@ -31,11 +31,11 @@
 	{ "op": "table", "key": "table", "id": { "name": "foo" } },
 	{ "op": "jmp-fail", "label": "foo-fail" },
 
-	{ "op": "literal", "key": "table", "value": "success" },
+	{ "op": "literal", "key": "result", "value": "success" },
 	{ "op": "jmp", "label": "foo-out" },
 
         { "op": "label", "name": "foo-fail" },
-	{ "op": "literal", "key": "table", "value": "fail" },
+	{ "op": "literal", "key": "result", "value": "fail" },
 
 	{ "op": "label", "name": "foo-out" },
 	{ "op": "end-object", "key": "foo" }
