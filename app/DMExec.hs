@@ -9,6 +9,7 @@ import Control.Applicative
 import Control.Lens
 import Control.Monad.State
 import Data.Aeson
+import Data.Aeson.Encode.Pretty
 import Data.Array.IArray
 import qualified Data.ByteString.Lazy.Char8 as LS
 import qualified Data.HashMap.Strict as H
@@ -23,6 +24,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 
 import System.Exit
+import System.IO
 import System.Posix (Fd)
 
 -------------------------------------------
@@ -159,33 +161,29 @@ runVM code = withControlDevice $ \ctrl -> do
 
 errorTarget len = TableLine "error" len ""
 
-program :: I.Program
-program = I.mkProgram 0 ins
-    where
-        ins = [
-            I.RemoveAll,
-            I.Create bar,
-            I.Load bar table,
-            I.List "list",
-            I.Suspend bar,
-            I.Resume bar,
-            I.TableQ "bar-table" bar,
-            I.InfoQ "bar-info" bar,
-            I.Remove bar,
-            I.Exit 17
-            ]
-        bar = DeviceId "bar" Nothing
-        table = [
-            errorTarget 1024,
-            errorTarget 4096]
+usage :: IO ExitCode
+usage = do
+    hPutStrLn stderr "usage: dmexec <program file>"
+    return $ ExitFailure 1
 
-dmExecCmd :: [Text] -> IO ()
-dmExecCmd _ = do
-    LS.putStrLn . encode $ program
-    (exitCode, obj) <- runVM program
-    LS.putStrLn . encode $ obj
-    case exitCode of
-        0 -> exitSuccess
-        _ -> exitWith (ExitFailure exitCode)
+readProgram :: FilePath -> IO (Maybe I.Program)
+readProgram path = LS.readFile path >>= (return . decode)
+
+dmExecCmd :: [Text] -> IO ExitCode
+dmExecCmd args = do
+    if length args /= 1
+    then usage
+    else do
+        mprg<- readProgram . T.unpack . head $ args
+        case mprg of
+            Nothing -> do
+                hPutStrLn stderr "Invalid program"
+                return $ ExitFailure 1
+            Just program -> do
+                (exitCode, obj) <- runVM program
+                LS.putStrLn . encodePretty $ obj
+                if exitCode == 0
+                then return ExitSuccess
+                else return $ ExitFailure exitCode
 
 -------------------------------------------
