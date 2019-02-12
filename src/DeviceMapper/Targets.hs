@@ -181,3 +181,13 @@ instance ToTarget Cache where
             cacheOriginDev c]
     }
 
+----------------------------------------------
+
+data Target =
+    ErrorTarget Error |
+    LinearTarget Linear |
+    StripedTarget Striped |
+    ThinPoolTarget ThinPool |
+    ThinTarget Thin |
+    CacheTarget Cache
+
