@@ -55,7 +55,7 @@ data Striped = Striped {
 
 instance ToTarget Striped where
     toTarget (Striped l c ds) = Target {
-        targetLine = TableLine "stiped" l (join ([T.pack (show c)] ++
+        targetLine = TableLine "striped" l (join ([T.pack (show c)] ++
                                          concatMap expand ds)),
         targetDeps = map fst ds
     }
