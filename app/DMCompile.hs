@@ -1,8 +1,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Activate (
-    activateCmd
+module DMCompile (
+    dmCompileCmd
     ) where
 
 import qualified DeviceMapper.Instructions as I
@@ -18,6 +18,7 @@ import qualified Data.Text.IO as TIO
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util
 import GHC.Generics
+import System.Exit
 
 -- Prototype for compiling the activation of trees of devices.
 
@@ -53,13 +54,14 @@ sda, sdb :: Device
 sda = ExternalDevice (T.pack "/dev/sda")
 sdb = ExternalDevice (T.pack "/dev/sdb")
 
-activateCmd :: [Text] -> IO ()
-activateCmd _ = do
+dmCompileCmd :: [Text] -> IO ExitCode
+dmCompileCmd _ = do
     putStrLn "ACTIVATE:"
     -- putDocW 80 (indent 4 (I.prettyProgram $ activate dev))
     putStrLn "\n\nDEACTIVATE:"
     -- putDocW 80 (indent 4 (I.prettyProgram $ deactivate dev))
     putStrLn ""
+    return ExitSuccess
     where
         dev = DMDevice (DeviceId {devName = (T.pack "test1"), devUUID = Nothing}) table
         table = Table [toTarget (Linear sda 0 1024),
