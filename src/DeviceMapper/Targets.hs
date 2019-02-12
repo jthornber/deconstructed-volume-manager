@@ -1,5 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module DeviceMapper.Targets (
-    Error(..),
+        Error(..),
     Linear(..),
     Striped(..),
     ThinPool(..),
@@ -22,7 +24,7 @@ data Error = Error {
 
 instance ToTarget Error where
     toTarget (Error len) = Target {
-        targetLine = TableLine (T.pack "error") len (T.pack ""),
+        targetLine = TableLine "error" len "",
         targetDeps = []
     }
 
@@ -36,9 +38,9 @@ data Linear = Linear {
 
 instance ToTarget Linear where
     toTarget (Linear dev b e) = Target {
-        targetLine = TableLine (T.pack "linear") (e - b) (T.concat [
+        targetLine = TableLine "linear" (e - b) (T.concat [
             devPath dev,
-            T.pack " ",
+            " ",
             T.pack $ show b]),
         targetDeps = [dev]
     }
@@ -53,7 +55,7 @@ data Striped = Striped {
 
 instance ToTarget Striped where
     toTarget (Striped l c ds) = Target {
-        targetLine = TableLine (T.pack "stiped") l (join ([T.pack (show c)] ++
+        targetLine = TableLine "stiped" l (join ([T.pack (show c)] ++
                                          concatMap expand ds)),
         targetDeps = map fst ds
     }
@@ -107,7 +109,7 @@ formatTPLine tp = join ([
 
 instance ToTarget ThinPool where
     toTarget tp = Target {
-        targetLine = TableLine (T.pack "thin-pool") (thinPoolLen tp) (formatTPLine tp),
+        targetLine = TableLine "thin-pool" (thinPoolLen tp) (formatTPLine tp),
         targetDeps = [thinPoolDataDev tp, thinPoolMetadataDev tp]
     }
 
@@ -132,7 +134,7 @@ formatTLine t = join ([
 
 instance ToTarget Thin where
     toTarget t = Target {
-        targetLine = TableLine (T.pack "thin") (thinLen t) (formatTLine t),
+        targetLine = TableLine "thin" (thinLen t) (formatTLine t),
         targetDeps = [thinPoolDev t] ++ (maybeToList . thinExternalOrigin $ t)
     }
 
@@ -174,7 +176,7 @@ formatCLine c = join [
 
 instance ToTarget Cache where
     toTarget c = Target {
-        targetLine = TableLine (T.pack "cache") (cacheLen c) (formatCLine c),
+        targetLine = TableLine "cache" (cacheLen c) (formatCLine c),
         targetDeps = [
             cacheMetadataDev c,
             cacheFastDev c,
