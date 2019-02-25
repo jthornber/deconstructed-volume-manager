@@ -30,6 +30,127 @@ import GHC.Generics
 import System.Exit
 import System.IO
 
+----------------------------------------------
+
+data LowLevelTarget = LowLevelTarget {
+    targetLine :: TableLine,
+    targetDeps :: [Device]
+} deriving (Eq, Show)
+
+class ToTarget a where
+    toTarget :: a -> LowLevelTarget
+
+instance ToTarget ErrorTarget where
+    toTarget (ErrorTarget len) = LowLevelTarget {
+        targetLine = TableLine "error" len "",
+        targetDeps = []
+    }
+
+instance ToTarget LinearTarget where
+    toTarget (LinearTarget dev b e) = LowLevelTarget {
+        targetLine = TableLine "linear" (e - b) (T.concat [
+            devPath dev,
+            " ",
+            T.pack $ show b]),
+        targetDeps = [dev]
+    }
+
+instance ToTarget StripedTarget where
+    toTarget (StripedTarget l c ds) = LowLevelTarget {
+        targetLine = TableLine "striped" l (join ([T.pack (show c)] ++
+                                         concatMap expand ds)),
+        targetDeps = map (\(DeviceOffset d _) -> d) ds
+    }
+        where
+            expand (DeviceOffset d s) = [devPath d, T.pack $ show s]
+            join = T.intercalate (T.pack " ")
+
+formatTPLine :: ThinPoolTarget -> Text
+formatTPLine tp = join ([
+    dev thinPoolMetadataDev,
+    dev thinPoolDataDev,
+    nr thinPoolBlockSize,
+    nr thinPoolLowWaterMark,
+    len opts] ++ opts)
+    where
+        opts = concatMap maybeToList [
+            rflag thinPoolZero "skip-block-zeroing",
+            rflag thinPoolDiscard "ignore-discard",
+            flag thinPoolDiscardPassdown "no-discard-passdown",
+            flag thinPoolReadOnly "read-only",
+            flag thinPoolErrorIfNoSpace "error-if-no-space"]
+
+        flag fn f = if fn tp
+                    then Just . T.pack $ f
+                    else Nothing
+
+        rflag fn = flag (not . fn)
+
+        lit v = T.pack v
+        nr fn = T.pack . show . fn $ tp
+        dev fn = devPath . fn $ tp
+        len = T.pack . show . length
+        join = T.intercalate (T.pack " ")
+
+instance ToTarget ThinPoolTarget where
+    toTarget tp = LowLevelTarget {
+        targetLine = TableLine "thin-pool" (thinPoolLen tp) (formatTPLine tp),
+        targetDeps = [thinPoolDataDev tp, thinPoolMetadataDev tp]
+    }
+
+formatTLine :: ThinTarget -> Text
+formatTLine t = join ([
+    dev thinPoolDev,
+    nr thinId] ++ (maybeToList (devPath <$> (thinExternalOrigin t))))
+    where
+        lit v = T.pack v
+        nr fn = T.pack . show . fn $ t
+        dev fn = devPath . fn $ t
+        join = T.intercalate (T.pack " ")
+
+instance ToTarget ThinTarget where
+    toTarget t = LowLevelTarget {
+        targetLine = TableLine "thin" (thinLen t) (formatTLine t),
+        targetDeps = [thinPoolDev t] ++ (maybeToList . thinExternalOrigin $ t)
+    }
+
+formatCLine :: CacheTarget -> Text
+formatCLine c = join [
+    dev cacheMetadataDev,
+    dev cacheFastDev,
+    dev cacheOriginDev,
+    nr cacheBlockSize,
+    len (cacheFeatures c),
+    join (cacheFeatures c),
+    formatPolicyLine (cachePolicy c)]
+    where
+        lit v = T.pack v
+        nr fn = T.pack . show . fn $ c
+        dev fn = devPath . fn $ c
+        len = T.pack . show . length
+        join = T.intercalate (T.pack " ")
+        formatPolicyLine (CachePolicy n ks) = join ([n] ++ (concatMap expand ks))
+        expand (k, v) = [k, v]
+
+instance ToTarget CacheTarget where
+    toTarget c = LowLevelTarget {
+        targetLine = TableLine "cache" (cacheLen c) (formatCLine c),
+        targetDeps = [
+            cacheMetadataDev c,
+            cacheFastDev c,
+            cacheOriginDev c]
+    }
+
+newtype Table = Table {
+    tableTargets :: [LowLevelTarget]
+} deriving (Eq, Show)
+
+tableDeps :: Table -> [Device]
+tableDeps = concatMap targetDeps . tableTargets
+
+tablePrepare :: Table -> [TableLine]
+tablePrepare = map targetLine . tableTargets
+
 {-
 ----------------------------------------------
 -- Table Map

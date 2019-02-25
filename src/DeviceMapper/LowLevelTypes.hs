@@ -27,7 +27,7 @@ type DevicePath = Text
 data DeviceId = DeviceId {
     devName :: Text,
     devUUID :: Maybe Text
-} deriving (Eq, Show)
+} deriving (Eq, Ord, Show)
 
 instance ToJSON DeviceId where
     toJSON (DeviceId n u) = object $ ["name" .= n] ++ uuid
@@ -40,9 +40,7 @@ instance FromJSON DeviceId where
     parseJSON (Object v) = DeviceId <$> v .: "name" <*> v .:? "uuid"
     parseJSON _ = mzero
 
-
-
--- This is returned by device mapper
+-- This is returned by the dm-ioctl interface
 data DeviceInfo = DeviceInfo {
     devInfoDevice :: Word64,
     devInfoName :: Text
