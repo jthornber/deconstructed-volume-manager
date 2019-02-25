@@ -24,7 +24,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LS
 import DeviceMapper.IoctlConsts
 import DeviceMapper.IoctlMarshal
-import DeviceMapper.Types
+import DeviceMapper.LowLevelTypes
 import Foreign
 import Foreign.C.Types
 import Foreign.C.String

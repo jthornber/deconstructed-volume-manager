@@ -8,8 +8,8 @@ module DMCompile (
 
 import Control.Monad.State
 import qualified DeviceMapper.Instructions as I
-import DeviceMapper.Types
-import DeviceMapper.Targets
+import DeviceMapper.LowLevelTypes
+import DeviceMapper.HighLevelTypes
 
 import Data.Aeson
 import Data.Aeson.Encode.Pretty

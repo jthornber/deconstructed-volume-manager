@@ -1,24 +1,31 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module DeviceMapper.Targets (
-        Error(..),
+module DeviceMapper.HighLevelTypes (
+    Error(..),
     Linear(..),
     Striped(..),
     ThinPool(..),
     Thin(..),
     CachePolicy(..),
     Cache(..),
-    TargetP(..)
+    TargetP(..),
+    Target(..),
+    Table(..),
+    tableDeps,
+    Device(..),
+    devPath,
+    tablePrepare,
+    ToTarget(..)
     ) where
 
 import Control.Monad
-import DeviceMapper.Types
 import Data.Aeson hiding (Error)
 import Data.Aeson.Types hiding (Error)
 import qualified Data.HashMap.Strict as H
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
+import DeviceMapper.LowLevelTypes
 
 ----------------------------------------------
 
@@ -333,3 +340,46 @@ instance FromJSON TargetP where
             "cache" -> CacheTarget <$> parseJSON o
     parseJSON _ = mzero
 
+data Target = Target {
+    targetLine :: TableLine,
+    targetDeps :: [Device]
+} deriving (Eq, Show)
+
+newtype Table = Table {
+    tableTargets :: [Target]
+} deriving (Eq, Show)
+
+tableDeps :: Table -> [Device]
+tableDeps = concatMap targetDeps . tableTargets
+
+tablePrepare :: Table -> [TableLine]
+tablePrepare = map targetLine . tableTargets
+
+class ToTarget a where
+    toTarget :: a -> Target
+
+devPath :: Device -> Text
+devPath (DMDevice n) = T.append "/dev/mapper/" (devName n)
+devPath (ExternalDevice p) = p
+
+-- FIXME: I don't think we can have the table in here, since the table
+-- will contain targets that contain devices ... and so we recurse.  dm-compile
+-- will have to be passed a [(Device, Table)], we can then follow the dependencies
+-- to work out which ones are the top-level ones.
+data Device =
+    DMDevice DeviceId |
+    ExternalDevice DevicePath
+    deriving (Show, Eq)
+
+instance ToJSON Device where
+    toJSON (DMDevice d) = object ["kind" .= ("dm-device" :: Text), "id" .= d]
+    toJSON (ExternalDevice p) = object ["kind" .= ("external-device" :: Text), "path" .= p]
+
+instance FromJSON Device where
+    parseJSON (Object o) = do
+        k <- (o .: "kind" :: Parser Text)
+        case k of
+            "dm-device" -> DMDevice <$> o .: "id"
+            "external-device" -> ExternalDevice <$> o .: "path"
+            _ -> mzero
+    parseJSON _ = mzero

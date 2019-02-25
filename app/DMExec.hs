@@ -16,7 +16,7 @@ import qualified Data.HashMap.Strict as H
 import Data.Maybe
 import qualified DeviceMapper.Instructions as I
 import DeviceMapper.Ioctl
-import DeviceMapper.Types
+import DeviceMapper.LowLevelTypes
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -180,6 +180,10 @@ runVM :: I.Program -> IO (Int, Value)
 runVM code = withControlDevice $ \ctrl -> do
     (exitCode, vm) <- runStateT execCode (newState ctrl code)
     return (exitCode, Object . head $ vm ^. vmObj)
+
+-- FIXME: I don't think these belong here
+tableLinePrepare :: TableLine -> Text
+tableLinePrepare (TableLine n len txt) = T.concat [n, " ", T.pack $ show len, " ", txt]
 
 --------------------------------------------------
 

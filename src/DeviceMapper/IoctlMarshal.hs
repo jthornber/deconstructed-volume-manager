@@ -39,7 +39,7 @@ module DeviceMapper.IoctlMarshal (
     ) where
 
 import Debug.Trace
-import DeviceMapper.Types
+import DeviceMapper.LowLevelTypes
 import DeviceMapper.IoctlConsts
 
 import Data.Binary.Get

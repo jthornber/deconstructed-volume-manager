@@ -22,7 +22,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util
-import DeviceMapper.Types
+import DeviceMapper.LowLevelTypes
 
 type Address = Int
 
