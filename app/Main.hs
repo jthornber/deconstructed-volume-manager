@@ -1,8 +1,7 @@
 module Main where
 
-import Lib
-import DMCompile
-import DMExec
+import Commands.DMCompile
+import Commands.DMExec
 
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T

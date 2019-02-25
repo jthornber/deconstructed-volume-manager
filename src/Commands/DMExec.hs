@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module DMExec (
+module Commands.DMExec (
         dmExecCmd
     ) where
 
