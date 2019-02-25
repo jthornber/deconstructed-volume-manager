@@ -187,7 +187,7 @@ errorTarget len = TableLine "error" len ""
 
 usage :: IO ExitCode
 usage = do
-    hPutStrLn stderr "usage: dmexec <program file>"
+    hPutStrLn stderr "usage: dm-exec <program file>"
     return $ ExitFailure 1
 
 readProgram :: FilePath -> IO (Either String I.Program)

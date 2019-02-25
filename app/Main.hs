@@ -12,8 +12,8 @@ import System.IO
 
 commands :: M.Map String ([T.Text] -> IO ExitCode)
 commands = M.fromList [
-    ("dmexec", dmExecCmd),
-    ("dmcompile", dmCompileCmd)]
+    ("dm-exec", dmExecCmd),
+    ("dm-compile", dmCompileCmd)]
 
 usage :: IO ()
 usage = do

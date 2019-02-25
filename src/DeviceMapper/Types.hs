@@ -19,6 +19,7 @@ module DeviceMapper.Types (
 import Control.Monad
 import Data.Aeson
 import Data.Aeson.Types
+import qualified Data.HashMap.Strict as H
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -45,10 +46,27 @@ instance FromJSON DeviceId where
     parseJSON (Object v) = DeviceId <$> v .: "name" <*> v .:? "uuid"
     parseJSON _ = mzero
 
+-- FIXME: I don't think we can have the table in here, since the table
+-- will contain targets that contain devices ... and so we recurse.  dm-compile
+-- will have to be passed a [(Device, Table)], we can then follow the dependencies
+-- to work out which ones are the top-level ones.
 data Device =
-    DMDevice DeviceId Table |
+    DMDevice DeviceId |
     ExternalDevice DevicePath
     deriving (Show, Eq)
+
+instance ToJSON Device where
+    toJSON (DMDevice d) = object ["kind" .= ("dm-device" :: Text), "id" .= d]
+    toJSON (ExternalDevice p) = object ["kind" .= ("external-device" :: Text), "path" .= p]
+
+instance FromJSON Device where
+    parseJSON (Object o) = do
+        k <- (o .: "kind" :: Parser Text)
+        case k of
+            "dm-device" -> DMDevice <$> o .: "id"
+            "external-device" -> ExternalDevice <$> o .: "path"
+            _ -> mzero
+    parseJSON _ = mzero
 
 -- This is returned by device mapper
 data DeviceInfo = DeviceInfo {
@@ -61,7 +79,7 @@ instance ToJSON DeviceInfo where
     toEncoding (DeviceInfo d n) = pairs ("dev" .= d <> "name" .= n)
 
 devPath :: Device -> Text
-devPath (DMDevice n _) = T.append "/dev/mapper/" (devName n)
+devPath (DMDevice n) = T.append "/dev/mapper/" (devName n)
 devPath (ExternalDevice p) = p
 
 data TableLine = TableLine Text Sector Text deriving (Eq, Show)

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 
@@ -27,14 +28,20 @@ import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util
 import GHC.Generics
 import System.Exit
+import System.IO
+
+{-
+----------------------------------------------
+-- Table Map
+
+type TableMap = Map DeviceId [TargetP]
 
 ----------------------------------------------
-
 -- Compilation steps:
--- i) read before and after device descriptions
--- ii) compile to an intermediate representation (tree like)
--- iii) flatten to dmexec
--- iv) output
+--   read before and after device descriptions
+--   compile to an intermediate representation (tree like)
+--   flatten to dm-exec instructions
+--   output
 
 ----------------------------------------------
 -- Intermediate rep
@@ -66,10 +73,6 @@ data IR = Create DeviceId |
 -- err 4 - Activate myThinPool
 -- err 5 - Resume myThinPool
 -- err 99 - ThinCreateMessage myThinPool 4
---
-
--- Change dmexec semantics so it will not do anything until the IoctlFailed
--- flag is cleared.  So we can just fall through?
 
 activateDevs :: [(DeviceId, Table)] -> IR
 activateDevs devs = activate' devs []
@@ -87,7 +90,7 @@ activateDevs devs = activate' devs []
 
 -- Returns the devices sorted bottom up
 allDepDevs :: Device -> [(DeviceId, Table)]
-allDepDevs d@(DMDevice n t) = (concatMap allDepDevs . tableDeps $ t) ++ [(n, t)]
+allDepDevs d@(DMDevice n) = (concatMap allDepDevs . tableDeps $ t) ++ [(n, t)]
 allDepDevs _ = []
 
 activate :: Device -> IR
@@ -181,18 +184,30 @@ toProgram ir = I.mkProgram 0 (toList $ tidyLabels (evalState (linearise ir) 0))
 
 --------------------------------------------
 
-sda, sdb :: Device
-sda = ExternalDevice (T.pack "/dev/sda")
-sdb = ExternalDevice (T.pack "/dev/sdb")
+usage :: IO ExitCode
+usage = do
+    hPutStrLn stderr "usage: dm-compile <device description file>"
+    return $ ExitFailure 1
+
+readDevices :: FilePath -> IO (Either String [(Device, [TargetP])])
+readDevices path = L8.readFile path >>= (return . eitherDecode)
 
 dmCompileCmd :: [Text] -> IO ExitCode
-dmCompileCmd _ = do
-    L8.putStrLn . encodePretty $ program
+dmCompileCmd args = do
+    if length args /= 1
+    then usage
+    else do
+        edevs <- readDevices . T.unpack . head $ args
+        case edevs of
+            Left err -> do
+                hPutStr stderr "Invalid device description: "
+                hPutStrLn stderr err
+                return $ ExitFailure 1
+            Right devs -> do
+                toProgram . activate $ devs
+-}
+
+dmCompileCmd :: [Text] -> IO ExitCode
+dmCompileCmd args = do
+    putStrLn "not implemented"
     return ExitSuccess
-
-    where
-        dev = DMDevice (DeviceId {devName = (T.pack "test1"), devUUID = Nothing}) table
-        table = Table [toTarget (Linear sda 0 1024),
-                       toTarget (Linear sdb 0 1024)]
-        program = toProgram . activate $ dev
-

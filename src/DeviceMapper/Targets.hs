@@ -7,11 +7,15 @@ module DeviceMapper.Targets (
     ThinPool(..),
     Thin(..),
     CachePolicy(..),
-    Cache(..)
+    Cache(..),
+    TargetP(..)
     ) where
 
+import Control.Monad
 import DeviceMapper.Types
-
+import Data.Aeson hiding (Error)
+import Data.Aeson.Types hiding (Error)
+import qualified Data.HashMap.Strict as H
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -27,6 +31,13 @@ instance ToTarget Error where
         targetLine = TableLine "error" len "",
         targetDeps = []
     }
+
+instance ToJSON Error where
+    toJSON (Error len) = object ["length" .= len]
+
+instance FromJSON Error where
+    parseJSON (Object o) = Error <$> o .: "length"
+    parseJSON _ = mzero
 
 ----------------------------------------------
 
@@ -45,23 +56,48 @@ instance ToTarget Linear where
         targetDeps = [dev]
     }
 
+instance ToJSON Linear where
+    toJSON (Linear d b e) = object ["dev" .= d, "begin" .= b, "end" .= e]
+
+instance FromJSON Linear where
+    parseJSON (Object o) = Linear <$> o .: "dev" <*> o .: "begin" <*> o .: "end"
+    parseJSON _ = mzero
+
 ----------------------------------------------
+
+data DeviceOffset = DeviceOffset Device Sector
+    deriving (Eq, Show)
+
+instance ToJSON DeviceOffset where
+    toJSON (DeviceOffset d o) = object ["dev" .= d, "offset" .= o]
+
+instance FromJSON DeviceOffset where
+    parseJSON (Object o) = DeviceOffset <$> o .: "dev" <*> o .: "offset"
+    parseJSON _ = mzero
 
 data Striped = Striped {
     stripedLen :: Sector,
     stripedChunkSize :: Sector,
-    stripedDevs :: [(Device, Sector)]
+    stripedDevs :: [DeviceOffset]
 } deriving (Eq, Show)
 
 instance ToTarget Striped where
     toTarget (Striped l c ds) = Target {
         targetLine = TableLine "striped" l (join ([T.pack (show c)] ++
                                          concatMap expand ds)),
-        targetDeps = map fst ds
+        targetDeps = map (\(DeviceOffset d _) -> d) ds
     }
         where
-            expand (d, s) = [devPath d, T.pack $ show s]
+            expand (DeviceOffset d s) = [devPath d, T.pack $ show s]
             join = T.intercalate (T.pack " ")
+
+instance ToJSON Striped where
+    toJSON (Striped len csize devs) =
+        object ["length" .= len, "chunk-size" .= csize, "devs" .= (toJSON devs)]
+
+instance FromJSON Striped where
+    parseJSON (Object o) = Striped <$> o .: "length" <*> o .: "chunk-size" <*> o .: "devs"
+    parseJSON _ = mzero
 
 ----------------------------------------------
 
@@ -113,6 +149,34 @@ instance ToTarget ThinPool where
         targetDeps = [thinPoolDataDev tp, thinPoolMetadataDev tp]
     }
 
+instance ToJSON ThinPool where
+    toJSON tp = object [
+        "length" .= thinPoolLen tp,
+        "data-dev" .= thinPoolDataDev tp,
+        "metadata-dev" .= thinPoolMetadataDev tp,
+        "block-size" .= thinPoolBlockSize tp,
+        "low-water-mark" .= thinPoolLowWaterMark tp,
+        "zero" .= thinPoolZero tp,
+        "discard" .= thinPoolDiscard tp,
+        "discard-passdown" .= thinPoolDiscardPassdown tp,
+        "read-only" .= thinPoolReadOnly tp,
+        "error-if-no-space" .= thinPoolErrorIfNoSpace tp]
+
+
+instance FromJSON ThinPool where
+    parseJSON (Object o) =
+        ThinPool <$> o .: "length" <*>
+                     o .: "data-dev" <*>
+                     o .: "metadata-dev" <*>
+                     o .: "block-size" <*>
+                     o .: "low-water-mark" <*>
+                     o .: "zero" <*>
+                     o .: "discard" <*>
+                     o .: "discard-passdown" <*>
+                     o .: "read-only" <*>
+                     o .: "error-if-no-space"
+    parseJSON _ = mzero
+
 ----------------------------------------------
 
 data Thin = Thin {
@@ -138,6 +202,25 @@ instance ToTarget Thin where
         targetDeps = [thinPoolDev t] ++ (maybeToList . thinExternalOrigin $ t)
     }
 
+instance ToJSON Thin where
+    toJSON (Thin len pool nr Nothing) =
+        object ["length" .= len,
+                "pool" .= pool,
+                "id" .= nr]
+    toJSON (Thin len pool nr (Just origin)) =
+        object ["length" .= len,
+                "pool" .= pool,
+                "id" .= nr,
+                "origin" .= origin]
+
+instance FromJSON Thin where
+    parseJSON (Object o) =
+        Thin <$> o .: "length" <*>
+                 o .: "pool" <*>
+                 o .: "id" <*>
+                 o .:? "origin"
+    parseJSON _ = mzero
+
 ----------------------------------------------
 
 -- FIXME: add validation of the keys
@@ -145,6 +228,12 @@ data CachePolicy = CachePolicy {
     policyName :: Text,
     policyKeys :: [(Text, Text)]
 }
+
+instance ToJSON CachePolicy where
+    toJSON (CachePolicy name keys) = object ["name" .= name, "keys" .= keys]
+
+instance FromJSON CachePolicy where
+    parseJSON (Object o) = CachePolicy <$> o .: "name" <*> o .: "keys"
 
 data Cache = Cache {
     cacheLen :: Sector,
@@ -183,13 +272,64 @@ instance ToTarget Cache where
             cacheOriginDev c]
     }
 
+instance ToJSON Cache where
+    toJSON c = object [
+        "length" .= cacheLen c,
+        "metadata-dev" .= cacheMetadataDev c,
+        "fast-dev" .= cacheFastDev c,
+        "origin-dev" .= cacheOriginDev c,
+        "block-size" .= cacheBlockSize c,
+        "features" .= cacheFeatures c,
+        "policy" .= cachePolicy c]
+
+instance FromJSON Cache where
+    parseJSON (Object o) =
+        Cache <$> o .: "length" <*>
+                  o .: "metadata-dev" <*>
+                  o .: "fast-dev" <*>
+                  o .: "origin-dev" <*>
+                  o .: "block-size" <*>
+                  o .: "features" <*>
+                  o .: "policy"
+    parseJSON _ = mzero
+
 ----------------------------------------------
 
-data Target =
+-- FIXME: think of a better name
+data TargetP =
     ErrorTarget Error |
     LinearTarget Linear |
     StripedTarget Striped |
     ThinPoolTarget ThinPool |
     ThinTarget Thin |
     CacheTarget Cache
+
+addKind :: (ToJSON a) => Text -> a -> Value
+addKind k v = case toJSON v of
+    (Object o) -> Object $ H.insert "kind" (String k) o
+    _ -> error "not an object"
+
+instance ToJSON TargetP where
+    toJSON (ErrorTarget v) = addKind "error" v
+    toJSON (LinearTarget v) = addKind "linear" v
+    toJSON (StripedTarget v) = addKind "striped" v
+    toJSON (ThinPoolTarget v) = addKind "thin-pool" v
+    toJSON (ThinTarget v) = addKind "thin" v
+    toJSON (CacheTarget v) = addKind "cache" v
+
+
+getKind :: Object -> Parser Text
+getKind o = o .: "kind"
+
+instance FromJSON TargetP where
+    parseJSON o@(Object v) = do
+        k <- getKind v
+        case k of
+            "error" -> ErrorTarget <$> (parseJSON o :: Parser Error)
+            "linear" -> LinearTarget <$> parseJSON o
+            "striped" -> StripedTarget <$> parseJSON o
+            "thin-pool" -> ThinPoolTarget <$> parseJSON o
+            "thin" -> ThinTarget <$> parseJSON o
+            "cache" -> CacheTarget <$> parseJSON o
+    parseJSON _ = mzero
 
