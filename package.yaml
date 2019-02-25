@@ -20,22 +20,22 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/githubuser/dvm#readme>
 
 dependencies:
-- aeson >= 1.4.2.0
-- aeson-pretty >= 0.8.7
-- array >= 0.5.3.0
-- async >= 2.1.1.1
+- aeson
+- aeson-pretty
+- array
+- async
 - base >= 4.7 && < 5
-- binary >= 0.8.6.0
-- bytestring >= 0.10.8.2
-- containers >= 0.6.0.1
-- lens >= 4.17
-- mtl >= 2.2.1
-- prettyprinter >= 1.2.1
-- stm >= 2.5.0.0
-- text >= 1.2.3.1
-- typed-process >= 0.2.3.0
-- unix >= 2.7.2.2
-- unordered-containers >= 0.2.9.0
+- binary
+- bytestring
+- containers
+- lens
+- mtl
+- prettyprinter
+- stm
+- text
+- typed-process
+- unix
+- unordered-containers
 
 library:
   source-dirs: src
