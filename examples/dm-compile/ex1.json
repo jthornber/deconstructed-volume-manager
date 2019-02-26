@@ -1,30 +1,22 @@
 [
-    [
-        {
-            "kind": "dm-device",
-            "id": {
-                "name": "test1"
-            }
-        },
-        [
-            {
-                "begin": 0,
-                "kind": "linear",
-                "dev": {
-                    "path": "/dev/loop0",
-                    "kind": "external-device"
-                },
-                "end": 1024
-            },
-            {
-                "begin": 0,
-                "kind": "linear",
-                "dev": {
-                    "path": "/dev/loop1",
-                    "kind": "external-device"
-                },
-                "end": 1024
-            }
-        ]
-    ]
+	{ "id": { "name": "test1" }
+	  "table": [{
+	        "begin": 0,
+	        "kind": "linear",
+	        "dev": {
+	            "path": "/dev/loop0",
+	            "kind": "external-device"
+	        },
+	        "end": 1024
+	    },
+	    {
+	        "begin": 0,
+	        "kind": "linear",
+	        "dev": {
+	            "path": "/dev/loop1",
+	            "kind": "external-device"
+	        },
+	        "end": 1024
+	    }]
+	}
 ]

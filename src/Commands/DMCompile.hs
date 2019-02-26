@@ -3,7 +3,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Commands.DMCompile (
-    dmCompileCmd
+    dmCompileCmd,
+
+    -- Exported for testing
+    uniq
     ) where
 
 import Control.Monad.State
@@ -16,11 +19,12 @@ import Data.Aeson.Encode.Pretty
 import qualified Data.ByteString.Lazy.Char8 as L8
 import Data.Foldable
 import Data.List
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Sequence (Seq, (><), (|>), (<|))
 import qualified Data.Sequence as S
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -32,47 +36,28 @@ import System.IO
 
 ----------------------------------------------
 
-data LowLevelTarget = LowLevelTarget {
-    targetLine :: TableLine,
-    targetDeps :: [Device]
-} deriving (Eq, Show)
+formatError :: ErrorTarget -> TableLine
+formatError (ErrorTarget len) = TableLine "error" len ""
 
-class ToTarget a where
-    toTarget :: a -> LowLevelTarget
+formatLinear (LinearTarget dev b e) =
+    TableLine "linear" (e - b) (T.concat [ devPath dev, " ", T.pack $ show b])
 
-instance ToTarget ErrorTarget where
-    toTarget (ErrorTarget len) = LowLevelTarget {
-        targetLine = TableLine "error" len "",
-        targetDeps = []
-    }
-
-instance ToTarget LinearTarget where
-    toTarget (LinearTarget dev b e) = LowLevelTarget {
-        targetLine = TableLine "linear" (e - b) (T.concat [
-            devPath dev,
-            " ",
-            T.pack $ show b]),
-        targetDeps = [dev]
-    }
-
-instance ToTarget StripedTarget where
-    toTarget (StripedTarget l c ds) = LowLevelTarget {
-        targetLine = TableLine "striped" l (join ([T.pack (show c)] ++
-                                         concatMap expand ds)),
-        targetDeps = map (\(DeviceOffset d _) -> d) ds
-    }
-        where
-            expand (DeviceOffset d s) = [devPath d, T.pack $ show s]
-            join = T.intercalate (T.pack " ")
-
-formatTPLine :: ThinPoolTarget -> Text
-formatTPLine tp = join ([
-    dev thinPoolMetadataDev,
-    dev thinPoolDataDev,
-    nr thinPoolBlockSize,
-    nr thinPoolLowWaterMark,
-    len opts] ++ opts)
+formatStriped (StripedTarget l c ds) =
+    TableLine "striped" l (join ([T.pack (show c)] ++ concatMap expand ds))
     where
+        expand (DeviceOffset d s) = [devPath d, T.pack $ show s]
+        join = T.intercalate (T.pack " ")
+
+formatThinPool :: ThinPoolTarget -> TableLine
+formatThinPool tp = TableLine "thin-pool" (thinPoolLen tp) args
+    where
+        args = join ([
+                dev thinPoolMetadataDev,
+                dev thinPoolDataDev,
+                nr thinPoolBlockSize,
+                nr thinPoolLowWaterMark,
+                len opts] ++ opts)
+
         opts = concatMap maybeToList [
             rflag thinPoolZero "skip-block-zeroing",
             rflag thinPoolDiscard "ignore-discard",
@@ -92,38 +77,28 @@ formatTPLine tp = join ([
         len = T.pack . show . length
         join = T.intercalate (T.pack " ")
 
-instance ToTarget ThinPoolTarget where
-    toTarget tp = LowLevelTarget {
-        targetLine = TableLine "thin-pool" (thinPoolLen tp) (formatTPLine tp),
-        targetDeps = [thinPoolDataDev tp, thinPoolMetadataDev tp]
-    }
-
-formatTLine :: ThinTarget -> Text
-formatTLine t = join ([
-    dev thinPoolDev,
-    nr thinId] ++ (maybeToList (devPath <$> (thinExternalOrigin t))))
+formatThin :: ThinTarget -> TableLine
+formatThin t = TableLine "thin" (thinLen t) args
     where
+        args = join ([
+            dev thinPoolDev,
+            nr thinId] ++ (maybeToList (devPath <$> (thinExternalOrigin t))))
         lit v = T.pack v
         nr fn = T.pack . show . fn $ t
         dev fn = devPath . fn $ t
         join = T.intercalate (T.pack " ")
 
-instance ToTarget ThinTarget where
-    toTarget t = LowLevelTarget {
-        targetLine = TableLine "thin" (thinLen t) (formatTLine t),
-        targetDeps = [thinPoolDev t] ++ (maybeToList . thinExternalOrigin $ t)
-    }
-
-formatCLine :: CacheTarget -> Text
-formatCLine c = join [
-    dev cacheMetadataDev,
-    dev cacheFastDev,
-    dev cacheOriginDev,
-    nr cacheBlockSize,
-    len (cacheFeatures c),
-    join (cacheFeatures c),
-    formatPolicyLine (cachePolicy c)]
+formatCache :: CacheTarget -> TableLine
+formatCache c = TableLine "cache" (cacheLen c) args
     where
+        args = join [
+            dev cacheMetadataDev,
+            dev cacheFastDev,
+            dev cacheOriginDev,
+            nr cacheBlockSize,
+            len (cacheFeatures c),
+            join (cacheFeatures c),
+            formatPolicyLine (cachePolicy c)]
         lit v = T.pack v
         nr fn = T.pack . show . fn $ c
         dev fn = devPath . fn $ c
@@ -132,44 +107,80 @@ formatCLine c = join [
         formatPolicyLine (CachePolicy n ks) = join ([n] ++ (concatMap expand ks))
         expand (k, v) = [k, v]
 
-instance ToTarget CacheTarget where
-    toTarget c = LowLevelTarget {
-        targetLine = TableLine "cache" (cacheLen c) (formatCLine c),
-        targetDeps = [
-            cacheMetadataDev c,
-            cacheFastDev c,
-            cacheOriginDev c]
-    }
+toTableLine :: Target -> TableLine
+toTableLine (ErrorType v) = formatError v
+toTableLine (LinearType v) = formatLinear v
+toTableLine (StripedType v) = formatStriped v
+toTableLine (ThinPoolType v) = formatThinPool v
+toTableLine (ThinType v) = formatThin v
+toTableLine (CacheType v) = formatCache v
 
-newtype Table = Table {
-    tableTargets :: [LowLevelTarget]
-} deriving (Eq, Show)
+-- FIXME: rewrite the format functions to use Text.Builder
 
-tableDeps :: Table -> [Device]
-tableDeps = concatMap targetDeps . tableTargets
-
-tablePrepare :: Table -> [TableLine]
-tablePrepare = map targetLine . tableTargets
-
-{-
-----------------------------------------------
--- Table Map
-
-type TableMap = Map DeviceId [TargetP]
 
 ----------------------------------------------
--- Compilation steps:
---   read before and after device descriptions
---   compile to an intermediate representation (tree like)
---   flatten to dm-exec instructions
---   output
+-- Target device dependencies
+
+depsStriped (StripedTarget l c ds) = map (\(DeviceOffset d _) -> d) ds
+    where
+        expand (DeviceOffset d s) = [devPath d, T.pack $ show s]
+        join = T.intercalate (T.pack " ")
+
+depsThinPool tp = [thinPoolDataDev tp, thinPoolMetadataDev tp]
+depsThin t = [thinPoolDev t] ++ (maybeToList . thinExternalOrigin $ t)
+depsCache c = [ cacheMetadataDev c, cacheFastDev c, cacheOriginDev c]
+
+getTargetDeps :: Target -> [Device]
+getTargetDeps (ErrorType v) = []
+getTargetDeps (LinearType (LinearTarget d _ _)) = [d]
+getTargetDeps (StripedType v) = depsStriped v
+getTargetDeps (ThinPoolType v) = depsThinPool v
+getTargetDeps (ThinType v) = depsThin v
+getTargetDeps (CacheType v) = depsCache v
+
+devToId :: Device -> Maybe DeviceId
+devToId (ExternalDevice _) = Nothing
+devToId (DMDevice d) = Just d
+
+getTargetDMDeps :: Target -> [DeviceId]
+getTargetDMDeps = catMaybes . map devToId . getTargetDeps
 
 ----------------------------------------------
--- Intermediate rep
+-- Activation ordering
+
+-- Filters a list such that each element only appears once,
+-- and that occurence is the first in the list.
+-- eg, [1, 3, 1, 5, 5] -> [1, 3, 5]
+uniq :: (Ord a) => [a] -> [a]
+uniq = reverse . fst . foldr go ([], Set.empty) . reverse
+    where
+        go :: (Ord a) => a -> ([a], Set.Set a) -> ([a], Set.Set a)
+        go x (xs, seen)
+            | Set.member x seen = (xs, seen)
+            | otherwise         = (x:xs, Set.insert x seen)
+
+shallowDeps :: TableMap -> DeviceId -> [DeviceId]
+shallowDeps tm d = case M.lookup d tm of
+    Just ts -> concatMap getTargetDMDeps $ ts
+    Nothing -> []
+
+-- FIXME: detect circular deps
+-- I'm assuming there are no circular deps for now
+deepDeps :: TableMap -> DeviceId -> [DeviceId]
+deepDeps tm = concatMap (deepDeps tm) . shallowDeps tm
+
+-- Given a list of top level devices give back the order
+-- we need to activate the devs.
+-- Assumes no cyclic deps.
+sortByActivation :: TableMap -> [DeviceId] -> [DeviceId]
+sortByActivation tm = uniq . concatMap (deepDeps tm)
+
+----------------------------------------------
+-- TableMap -> IR
 
 data IR = Create DeviceId |
           Remove DeviceId |
-          Load DeviceId Table |
+          Load DeviceId [TableLine] |
           Suspend DeviceId |
           Resume DeviceId |
           List |
@@ -179,47 +190,38 @@ data IR = Create DeviceId |
           Begin [IR]
           deriving (Eq, Show)
 
--- When executing a program, there are the following outcomes:
--- 1) success
--- 2) fail, but managed to reverse, so all as at start
--- 3) fail, couldn't unpick
--- Can we just make do with 3 exit status's then?  Does the
--- program above need to know exactly what failed?  eg, corrupt
--- thin metadata leading to a thin_check/repair?  So programs need
--- to be using the error codes to cover a large number of potential failure cases.
--- Information to interpret these cases will have to be handed back
--- along with the compiled program.  They can't just be a text string, because
--- we have to act upon them.
--- eg,
--- err 4 - Activate myThinPool
--- err 5 - Resume myThinPool
--- err 99 - ThinCreateMessage myThinPool 4
+type TableMap = Map DeviceId [Target]
 
-activateDevs :: [(DeviceId, Table)] -> IR
-activateDevs devs = activate' devs []
+-- Does not unpick.
+deactivateMany :: [DeviceId] -> IR
+deactivateMany [] = Noop
+deactivateMany (dev:rest) = Begin [
+    Remove dev,
+    deactivateMany rest]
+
+-- Assumes the devices have been sorted into activation order.
+-- Unpicks.
+activateMany :: TableMap -> [DeviceId] -> [DeviceId] -> Maybe IR
+activateMany _ [] _ = Just Noop
+activateMany tm (dev : rest) unpick = do
+    table <- (map toTableLine) <$> M.lookup dev tm
+    activateRestIR <- activateMany tm rest (dev:unpick)
+    let unpickBadCreateIR = deactivateMany unpick
+    let unpickBadLoadIR = deactivateMany (dev:unpick)
+    return $
+        Begin [Create dev,
+               Test (Begin [Load dev table,
+                            Test activateRestIR
+                                 unpickBadLoadIR])
+                    unpickBadCreateIR]
+
+activate :: TableMap -> Maybe IR
+activate tm = activateMany tm devs []
     where
-        deactivate' [] = Noop
-        deactivate' (dev:rest) = Begin [Remove dev, deactivate' rest]
-
-        activate' [] _ = Noop
-        activate' ((dev, table):rest) unpick =
-            Begin [Create dev,
-                   Test (Begin [Load dev table,
-                                Test (activate' rest (dev:unpick))
-                                     (deactivate' (dev:unpick))])
-                        (deactivate' unpick)]
-
--- Returns the devices sorted bottom up
-allDepDevs :: Device -> [(DeviceId, Table)]
-allDepDevs d@(DMDevice n) = (concatMap allDepDevs . tableDeps $ t) ++ [(n, t)]
-allDepDevs _ = []
-
-activate :: Device -> IR
-activate d = activateDevs . toList $ devs
-    where
-        devs = allDepDevs d
+        devs = M.foldrWithKey (\k _ -> (k :)) [] tm
 
 ----------------------------------------------
+-- IR -> I.Program
 
 -- A little state monad to manage the labels
 type Labeller = State Int
@@ -235,7 +237,7 @@ s = S.singleton
 linearise :: IR -> Labeller (Seq I.Instruction)
 linearise (Create dev) = return . s $ I.Create dev
 linearise (Remove dev) = return . s $ I.Remove dev
-linearise (Load dev table) = return . s $ I.Load dev (tablePrepare table)
+linearise (Load dev table) = return . s $ I.Load dev table
 linearise (Suspend dev) = return . s $ I.Suspend dev
 linearise (Resume dev) = return . s $ I.Remove dev
 linearise (Test good bad) = do
@@ -299,9 +301,17 @@ tidyLabels instrs = S.fromList tidied
 
 -- FIXME: we can also simplify a sequence of Jmps
 
-
 toProgram :: IR -> I.Program
 toProgram ir = I.mkProgram 0 (toList $ tidyLabels (evalState (linearise ir) 0))
+
+--------------------------------------------
+-- Combinator library for building example device trees
+
+devs :: TableMap
+devs = M.fromList [
+    (DeviceId "foo" Nothing,
+     [LinearType $ LinearTarget (ExternalDevice "/dev/loop/0") 0 1024,
+      LinearType $ LinearTarget (ExternalDevice "/dev/loop/1") 4096 8192])]
 
 --------------------------------------------
 
@@ -310,10 +320,15 @@ usage = do
     hPutStrLn stderr "usage: dm-compile <device description file>"
     return $ ExitFailure 1
 
-readDevices :: FilePath -> IO (Either String [(Device, [TargetP])])
-readDevices path = L8.readFile path >>= (return . eitherDecode)
+readDevices :: FilePath -> IO (Either String TableMap)
+readDevices path = do
+    contents <- L8.readFile path
+    case eitherDecode contents of
+        Left err -> return $ Left err
+        Right xs -> return . Right . M.fromList $ xs
 
 dmCompileCmd :: [Text] -> IO ExitCode
+{-
 dmCompileCmd args = do
     if length args /= 1
     then usage
@@ -325,10 +340,17 @@ dmCompileCmd args = do
                 hPutStrLn stderr err
                 return $ ExitFailure 1
             Right devs -> do
-                toProgram . activate $ devs
--}
+                putStrLn "read input ok"
+                return ExitSuccess
+                --toProgram . activate $ devs
+                -}
 
-dmCompileCmd :: [Text] -> IO ExitCode
-dmCompileCmd args = do
-    putStrLn "not implemented"
-    return ExitSuccess
+dmCompileCmd _ = do
+    case activate devs of
+        Nothing -> do
+            hPutStrLn stderr "Compile failed.  Recursive devs?"
+            return (ExitFailure 1)
+        Just ir -> do
+            L8.putStrLn . encodePretty . toProgram $ ir
+            return ExitSuccess
+

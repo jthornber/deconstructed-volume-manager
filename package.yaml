@@ -28,6 +28,7 @@ dependencies:
 - binary
 - bytestring
 - containers
+- fgl
 - lens
 - mtl
 - prettyprinter
@@ -61,3 +62,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - dvm
+    - hspec
+    - QuickCheck
+
