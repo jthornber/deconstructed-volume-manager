@@ -305,15 +305,6 @@ toProgram :: IR -> I.Program
 toProgram ir = I.mkProgram 0 (toList $ tidyLabels (evalState (linearise ir) 0))
 
 --------------------------------------------
--- Combinator library for building example device trees
-
-devs :: TableMap
-devs = M.fromList [
-    (DeviceId "foo" Nothing,
-     [LinearType $ LinearTarget (ExternalDevice "/dev/loop/0") 0 1024,
-      LinearType $ LinearTarget (ExternalDevice "/dev/loop/1") 4096 8192])]
-
---------------------------------------------
 
 usage :: IO ExitCode
 usage = do
@@ -327,8 +318,8 @@ readDevices path = do
         Left err -> return $ Left err
         Right xs -> return . Right . M.fromList $ xs
 
+-- FIXME: use EitherT a b IO ?
 dmCompileCmd :: [Text] -> IO ExitCode
-{-
 dmCompileCmd args = do
     if length args /= 1
     then usage
@@ -340,17 +331,11 @@ dmCompileCmd args = do
                 hPutStrLn stderr err
                 return $ ExitFailure 1
             Right devs -> do
-                putStrLn "read input ok"
-                return ExitSuccess
-                --toProgram . activate $ devs
-                -}
-
-dmCompileCmd _ = do
-    case activate devs of
-        Nothing -> do
-            hPutStrLn stderr "Compile failed.  Recursive devs?"
-            return (ExitFailure 1)
-        Just ir -> do
-            L8.putStrLn . encodePretty . toProgram $ ir
-            return ExitSuccess
+                case activate devs of
+                    Nothing -> do
+                        hPutStrLn stderr "Compile failed.  Recursive devs?"
+                        return (ExitFailure 1)
+                    Just ir -> do
+                        L8.putStrLn . encodePretty . toProgram $ ir
+                        return ExitSuccess
 
