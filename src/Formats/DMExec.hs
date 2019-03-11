@@ -23,19 +23,20 @@ data Decl =
     Table [TableLine]
     deriving (Eq, Show)
 
-type Declarations = M.Map ByteString Decl
+type Declarations = M.Map Text Decl
 
 around :: Parser a -> Parser b -> Parser c -> Parser c
 around open close p = open *> p <* close
 
+-- FIXME: handle comments from within tok
 tok :: Parser a -> Parser a
 tok p = skipSpace *> p <* skipSpace
 
 lit :: ByteString -> Parser ByteString
 lit = tok . string
 
-identifier :: Parser ByteString
-identifier = tok (BS.pack <$> many' (satisfy idChar))
+identifier :: Parser Text
+identifier = E.decodeUtf8 <$> tok (BS.pack <$> many' (satisfy idChar))
     where
         idChar c = isDigit c || isAlpha_ascii c
 
@@ -49,17 +50,17 @@ escapedChar = do
         '\\' -> anyChar
         _ -> return c
 
-quotedString :: Parser ByteString
-quotedString = tok (doubleQuote *> (BS.pack <$> (many' escapedChar)) <* doubleQuote)
+quotedString :: Parser Text
+quotedString = E.decodeUtf8 <$> tok (doubleQuote *> (BS.pack <$> (many' escapedChar)) <* doubleQuote)
 
-reqPair :: ByteString -> Parser ByteString
+reqPair :: Text -> Parser Text
 reqPair key = tok $ do
     k <- identifier
     guard (k == key)
     lit "="
     quotedString
 
-deviceDecl :: Parser (ByteString, Decl)
+deviceDecl :: Parser (Text, Decl)
 deviceDecl = do
     lit "device"
     var <- identifier
@@ -68,21 +69,21 @@ deviceDecl = do
     name <- reqPair "name"
     uuid <- (Just <$> (lit "," *> reqPair "uuid")) <|> return Nothing
     lit "}"
-    return (var, Dev (DeviceId (E.decodeUtf8 name) (E.decodeUtf8 <$> uuid)))
+    return (var, Dev (DeviceId name uuid))
 
 sectors :: Parser Integer
 sectors = read <$> many digit
 
 targetType :: Parser Text
-targetType = E.decodeUtf8 <$> identifier
+targetType = identifier
 
 tableLine :: Parser TableLine
-tableLine = TableLine <$> targetType <*> sectors <*> (E.decodeUtf8 <$> quotedString)
+tableLine = TableLine <$> targetType <*> sectors <*> quotedString
 
 table :: Parser Decl
 table = Table <$> around (lit "[") (lit "]") (many' tableLine)
 
-tableDecl :: Parser (ByteString, Decl)
+tableDecl :: Parser (Text, Decl)
 tableDecl = do
     lit "table"
     var <- identifier
@@ -96,28 +97,41 @@ decls = M.fromList <$> many' (deviceDecl <|> tableDecl)
 label :: Parser I.Instruction
 label = do
     char '.'
-    I.Label <$> (E.decodeUtf8 <$> identifier)
+    I.Label <$> identifier
 
 key :: Parser Text
-key = undefined
+key = quotedString
 
 value :: Parser Text
-value = undefined
+value = quotedString
 
 deviceRef :: Declarations -> Parser DeviceId
-deviceRef decls = undefined
+deviceRef decls = do
+    var <- identifier
+    case M.lookup var decls of
+       (Just (Dev d)) -> return d
+       (Just _) -> fail "expected DeviceId, but got Table"
+       _ -> fail "no such DeviceId"
 
 tableRef :: Declarations -> Parser [TableLine]
-tableRef decls = undefined
+tableRef decls = do
+    var <- identifier
+    case M.lookup var decls of
+       (Just (Table t)) -> return t
+       (Just _) -> fail "expected Table, but got DeviceId"
+       _ -> fail "no such Table"
 
 labelRef :: Parser Text
-labelRef = undefined
+labelRef = identifier
 
 indent :: Parser ()
-indent = undefined
+indent = many1 (char ' ' <|> char '\t') >> return ()
 
 exitCode :: Parser Int
-exitCode = undefined
+exitCode = do
+    n <- read <$> many' digit
+    guard (n < 256)
+    return n
 
 instruction :: Declarations -> Parser I.Instruction
 instruction decls = do
