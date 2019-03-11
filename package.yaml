@@ -24,6 +24,7 @@ dependencies:
 - aeson-pretty
 - array
 - async
+- attoparsec
 - base >= 4.7 && < 5
 - binary
 - bytestring
