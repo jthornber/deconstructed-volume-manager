@@ -1,13 +1,30 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Formats.DMExec (
-    parseAsm
-        ) where
+    Decl (..),
+    parseAsm,
+
+    -- only exported for testing
+    Declarations (..),
+    lit,
+    space',
+    tok,
+    identifier,
+    quotedString,
+    deviceDecl,
+    tableDecl,
+    decls,
+    instruction,
+    bol,
+    indented,
+    foo
+    ) where
 
 import Control.Applicative
 import Control.Monad
-import Data.Attoparsec.ByteString.Char8
-import Data.ByteString.Char8 as BS
+import Data.Attoparsec.Text
+import Data.ByteString
+import Data.Char
 import Data.Map.Strict as M
 import Data.Text (Text)
 import Data.Text.Encoding as E
@@ -28,33 +45,48 @@ type Declarations = M.Map Text Decl
 around :: Parser a -> Parser b -> Parser c -> Parser c
 around open close p = open *> p <* close
 
+space' :: Parser ()
+space' = many space >> pure ()
+
 -- FIXME: handle comments from within tok
 tok :: Parser a -> Parser a
-tok p = skipSpace *> p <* skipSpace
+tok p = space' *> p
 
-lit :: ByteString -> Parser ByteString
-lit = tok . string
+lit :: Text -> Parser ()
+lit txt = tok (string txt) *> pure ()
+
+-- A trivial parser used in tests
+foo :: Parser ()
+foo = string "foo" *> pure ()
 
 identifier :: Parser Text
-identifier = E.decodeUtf8 <$> tok (BS.pack <$> many' (satisfy idChar))
+identifier = tok $ do
+    c <- satisfy isAlpha
+    cs <- Data.Attoparsec.Text.takeWhile idChar
+    pure $ T.cons c cs
     where
-        idChar c = isDigit c || isAlpha_ascii c
+        idChar c = isDigit c || isAlpha c
 
 doubleQuote :: Parser ()
-doubleQuote = char '"' *> return ()
+doubleQuote = char '"' *> pure ()
 
 escapedChar :: Parser Char
 escapedChar = do
     c <- notChar '"'
     case c of
-        '\\' -> anyChar
-        _ -> return c
+        '\\' -> do
+            c' <- anyChar
+            case c' of
+                't' -> pure '\t'
+                'n' -> pure '\n'
+                _ -> pure c'
+        _ -> pure c
 
 quotedString :: Parser Text
-quotedString = E.decodeUtf8 <$> tok (doubleQuote *> (BS.pack <$> (many' escapedChar)) <* doubleQuote)
+quotedString = tok (doubleQuote *> (T.pack <$> (many' escapedChar)) <* doubleQuote)
 
 reqPair :: Text -> Parser Text
-reqPair key = tok $ do
+reqPair key = do
     k <- identifier
     guard (k == key)
     lit "="
@@ -67,12 +99,12 @@ deviceDecl = do
     lit "="
     lit "{"
     name <- reqPair "name"
-    uuid <- (Just <$> (lit "," *> reqPair "uuid")) <|> return Nothing
+    uuid <- (Just <$> (lit "," *> reqPair "uuid")) <|> pure Nothing
     lit "}"
-    return (var, Dev (DeviceId name uuid))
+    pure (var, Dev (DeviceId name uuid))
 
 sectors :: Parser Integer
-sectors = read <$> many digit
+sectors = tok decimal
 
 targetType :: Parser Text
 targetType = identifier
@@ -81,7 +113,7 @@ tableLine :: Parser TableLine
 tableLine = TableLine <$> targetType <*> sectors <*> quotedString
 
 table :: Parser Decl
-table = Table <$> around (lit "[") (lit "]") (many' tableLine)
+table = Table <$> around (lit "[") (lit "]") (sepBy tableLine (tok $ char ','))
 
 tableDecl :: Parser (Text, Decl)
 tableDecl = do
@@ -89,15 +121,13 @@ tableDecl = do
     var <- identifier
     lit "="
     d <- table
-    return (var, d)
+    pure (var, d)
 
 decls :: Parser Declarations
 decls = M.fromList <$> many' (deviceDecl <|> tableDecl)
 
 label :: Parser I.Instruction
-label = do
-    char '.'
-    I.Label <$> identifier
+label = char '.' *> (I.Label <$> identifier)
 
 key :: Parser Text
 key = quotedString
@@ -109,7 +139,7 @@ deviceRef :: Declarations -> Parser DeviceId
 deviceRef decls = do
     var <- identifier
     case M.lookup var decls of
-       (Just (Dev d)) -> return d
+       (Just (Dev d)) -> pure d
        (Just _) -> fail "expected DeviceId, but got Table"
        _ -> fail "no such DeviceId"
 
@@ -117,7 +147,7 @@ tableRef :: Declarations -> Parser [TableLine]
 tableRef decls = do
     var <- identifier
     case M.lookup var decls of
-       (Just (Table t)) -> return t
+       (Just (Table t)) -> pure t
        (Just _) -> fail "expected Table, but got DeviceId"
        _ -> fail "no such Table"
 
@@ -125,39 +155,42 @@ labelRef :: Parser Text
 labelRef = identifier
 
 indent :: Parser ()
-indent = many1 (char ' ' <|> char '\t') >> return ()
+indent = many1 (char ' ' <|> char '\t') >> pure ()
 
 exitCode :: Parser Int
-exitCode = do
-    n <- read <$> many' digit
-    guard (n < 256)
-    return n
+exitCode = tok decimal
+
+instr (op, p) = (lit op) *> p
 
 instruction :: Declarations -> Parser I.Instruction
-instruction decls = do
-    indent
-    op <- identifier
-    case op of
-        "remove-all" -> return I.RemoveAll
-        "list" -> I.List <$> key
-        "create" -> I.Create <$> deviceRef decls
-        "remove" -> I.Remove <$> deviceRef decls
-        "suspend" -> I.Suspend <$> deviceRef decls
-        "resume" -> I.Resume <$> deviceRef decls
-        "load" -> I.Load <$> deviceRef decls <*> tableRef decls
-        "info" -> I.InfoQ <$> key <*> deviceRef decls
-        "table" -> I.TableQ <$> key <*> deviceRef decls
-        "begin" -> return I.BeginObject
-        "end" -> I.EndObject <$> (E.decodeUtf8 <$> "")
-        "literal" -> I.Literal <$> key <*> value
-        "jmp" -> I.Jmp <$> labelRef
-        "jmp-fail" -> I.JmpFail <$> labelRef
-        "exit" -> I.Exit <$> exitCode
-        _ -> fail "bad instruction"
+instruction decls = choice . Prelude.map instr $ [
+    ("remove-all", pure I.RemoveAll),
+    ("list", I.List <$> key),
+    ("create", I.Create <$> deviceRef decls),
+    ("remove", I.Remove <$> deviceRef decls),
+    ("suspend", I.Suspend <$> deviceRef decls),
+    ("resume", I.Resume <$> deviceRef decls),
+    ("load", I.Load <$> deviceRef decls <*> tableRef decls),
+    ("info", I.InfoQ <$> key <*> deviceRef decls),
+    ("table", I.TableQ <$> key <*> deviceRef decls),
+    ("begin", pure I.BeginObject),
+    ("end", I.EndObject <$> key),
+    ("literal", I.Literal <$> key <*> value),
+    ("jmp", I.Jmp <$> labelRef),
+    ("jmp-fail", I.JmpFail <$> labelRef),
+    ("exit", I.Exit <$> exitCode)]
 
--- FIXME: look for the .start label
+endLine = space' *> (endOfInput <|> endOfLine)
+
+-- Make sure p doesn't accept whitespace at the start
+bol :: Parser a -> Parser a
+bol p = p <* endLine
+
+indented :: Parser a -> Parser a
+indented p = indent *> p <* endLine
+
 instructions :: Declarations -> Parser I.Program
-instructions decls = I.mkProgram 0 <$> many' (label <|> instruction decls)
+instructions decls = I.mkProgram <$> many' ((bol label) <|> (indented $ instruction decls))
 
 prog :: Parser I.Program
 prog = decls >>= instructions
@@ -165,7 +198,7 @@ prog = decls >>= instructions
 buildError :: [String] -> String -> Text
 buildError _ msg = T.pack msg
 
-parseAsm :: ByteString -> Either Text I.Program
+parseAsm :: Text -> Either Text I.Program
 parseAsm input = case parse prog input of
     Fail _ ctxts msg -> Left $ buildError ctxts msg
     Partial _ -> Left $ "incomplete input"

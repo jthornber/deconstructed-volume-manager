@@ -302,7 +302,7 @@ tidyLabels instrs = S.fromList tidied
 -- FIXME: we can also simplify a sequence of Jmps
 
 toProgram :: IR -> I.Program
-toProgram ir = I.mkProgram 0 (toList $ tidyLabels (evalState (linearise ir) 0))
+toProgram ir = I.mkProgram (toList $ tidyLabels (evalState (linearise ir) 0))
 
 --------------------------------------------
 

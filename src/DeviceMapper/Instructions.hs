@@ -6,7 +6,6 @@ module DeviceMapper.Instructions (
     Address,
     Instruction(..),
     Program(..),
-    programEntryPoint,
     programInstructions,
     mkProgram
     ) where
@@ -92,22 +91,20 @@ instance FromJSON Instruction where
     parseJSON _ = mzero
 
 data Program = Program {
-    _programEntryPoint :: Address,
     _programInstructions :: A.Array Address Instruction
-}
+} deriving (Eq, Show)
 
 LENS.makeLenses ''Program
 
-mkProgram :: Address -> [Instruction] -> Program
-mkProgram start code = Program {
-    _programEntryPoint = start,
+mkProgram :: [Instruction] -> Program
+mkProgram code = Program {
     _programInstructions = array (0, (length code) - 1) (zip [0..] code)
 }
 
 instance ToJSON Program where
-    toJSON (Program pc i) = object ["entry-point" .= pc, "instructions" .= A.elems i]
-    toEncoding (Program pc i) = pairs ("entry-point" .= pc <> "instructions" .= A.elems i)
+    toJSON (Program i) = object ["instructions" .= A.elems i]
+    toEncoding (Program i) = pairs ("instructions" .= A.elems i)
 
 instance FromJSON Program where
-    parseJSON (Object v) = mkProgram <$> v .: "entry-point" <*> v .: "instructions"
+    parseJSON (Object v) = mkProgram <$> v .: "instructions"
 
