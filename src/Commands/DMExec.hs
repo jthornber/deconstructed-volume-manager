@@ -23,6 +23,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 
+import Formats.DMExec
+
 import System.Exit
 import System.IO
 import System.Posix (Fd)
@@ -58,7 +60,6 @@ newState ctrl code = VMState {
 
 type VM = StateT VMState IO
 
--- FIXME: we need a way of producing structured output (JSON)
 -- FIXME: switch to a Seq
 -- FIXME: we need a way of iterating across all devices (eg, to get deps and tables)
 
@@ -194,8 +195,8 @@ usage = do
     hPutStrLn stderr "usage: dm-exec <program file>"
     return $ ExitFailure 1
 
-readProgram :: FilePath -> IO (Either String I.Program)
-readProgram path = LS.readFile path >>= (return . eitherDecode)
+readProgram :: FilePath -> IO (Either Text I.Program)
+readProgram path = parseAsm <$> T.readFile path
 
 dmExecCmd :: [Text] -> IO ExitCode
 dmExecCmd args = do
@@ -206,7 +207,7 @@ dmExecCmd args = do
         case eprg of
             Left err -> do
                 hPutStr stderr "Invalid program: "
-                hPutStrLn stderr err
+                T.hPutStrLn stderr err
                 return $ ExitFailure 1
             Right program -> do
                 (exitCode, obj) <- runVM program

@@ -5,7 +5,6 @@ table table1 = [
    error 4096 ""
 ]
 
-# This label must be present
 .start
 	remove-all
 	create bar
