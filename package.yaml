@@ -2,9 +2,9 @@ name:                dvm
 version:             0.1.0.0
 github:              "githubuser/dvm"
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2019 Author name here"
+author:              "Joe Thornber"
+maintainer:          "ejt@redhat.com"
+copyright:           "2019 RedHat Ltd"
 
 extra-source-files:
 - README.md

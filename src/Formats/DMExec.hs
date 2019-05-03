@@ -17,7 +17,8 @@ module Formats.DMExec (
     instruction,
     bol,
     indented,
-    foo
+    foo,
+    program
     ) where
 
 import Control.Applicative
@@ -192,14 +193,18 @@ indented p = indent *> p <* endLine
 instructions :: Declarations -> Parser I.Program
 instructions decls = I.mkProgram <$> many' ((bol label) <|> (indented $ instruction decls))
 
-prog :: Parser I.Program
-prog = decls >>= instructions
+program :: Parser I.Program
+program = decls >>= instructions
 
 buildError :: [String] -> String -> Text
 buildError _ msg = T.pack msg
 
 parseAsm :: Text -> Either Text I.Program
-parseAsm input = case parse prog input of
+parseAsm input = case parse program input of
     Fail _ ctxts msg -> Left $ buildError ctxts msg
     Partial _ -> Left $ "incomplete input"
     Done _ r -> Right r
+
+----------------------------------------------------
+
+

@@ -10,6 +10,7 @@ import Data.Map.Strict as M
 import Data.Text (Text)
 import Data.Text.Encoding as E
 import Data.Text as T
+import Data.Text.IO as T
 import Test.Hspec
 import Test.QuickCheck
 import Control.Exception (evaluate)
@@ -35,7 +36,13 @@ decls2 = M.fromList [
     ("foo", Dev (DeviceId "foo" Nothing)),
     ("table", Table [TableLine "linear" 1024 "/dev/sdc 0"])]
 
-spec :: Spec
+ex :: Int -> I.Program -> IO ()
+ex n expected = do
+    txt <- T.readFile path
+    parseGood program txt expected
+    where
+        path = "./examples/dm-exec/ex" ++ (show n) ++ ".asm"
+
 spec = parallel $ do
     describe "Formats.DMExec.parser" $ do
         describe "space" $ do
@@ -181,4 +188,12 @@ spec = parallel $ do
 
             it "should accept exit" $
                 parseGood (instruction emptyDecls) "exit 234" $ I.Exit 234
+
+        describe "program" $ do
+            it "should handle empty programs" $ ex 1 (mkProgram [])
+            it "should handle just declarations" $ ex 2 (mkProgram [])
+            it "should handle no declarations" $ ex 3 (mkProgram [I.List "foo"])
+
+
+
 

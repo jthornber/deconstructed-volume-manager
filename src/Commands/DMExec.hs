@@ -208,12 +208,17 @@ dmExecCmd args = do
             Left err -> do
                 hPutStr stderr "Invalid program: "
                 T.hPutStrLn stderr err
-                return $ ExitFailure 1
+                pure $ ExitFailure 1
             Right program -> do
+                LS.putStrLn . encodePretty $ program
+                pure ExitSuccess
+
+                {-
                 (exitCode, obj) <- runVM program
                 LS.putStrLn . encodePretty $ obj
                 if exitCode == 0
                 then return ExitSuccess
                 else return $ ExitFailure exitCode
+                -}
 
 -------------------------------------------
