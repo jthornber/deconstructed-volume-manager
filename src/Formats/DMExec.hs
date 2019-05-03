@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Formats.DMExec (
     Decl (..),
     parseAsm,
@@ -20,6 +18,8 @@ module Formats.DMExec (
     foo,
     program
     ) where
+
+import Protolude
 
 import Control.Applicative
 import Control.Monad
@@ -164,7 +164,7 @@ exitCode = tok decimal
 instr (op, p) = (lit op) *> p
 
 instruction :: Declarations -> Parser I.Instruction
-instruction decls = choice . Prelude.map instr $ [
+instruction decls = choice . Protolude.map instr $ [
     ("remove-all", pure I.RemoveAll),
     ("list", I.List <$> key),
     ("create", I.Create <$> deviceRef decls),
@@ -196,12 +196,12 @@ instructions decls = I.mkProgram <$> many' ((bol label) <|> (indented $ instruct
 program :: Parser I.Program
 program = decls >>= instructions
 
-buildError :: [String] -> String -> Text
-buildError _ msg = T.pack msg
+buildError :: [Text] -> Text -> Text
+buildError _ msg = msg
 
 parseAsm :: Text -> Either Text I.Program
 parseAsm input = case parse program input of
-    Fail _ ctxts msg -> Left $ buildError ctxts msg
+    Fail _ ctxts msg -> Left $ buildError (fmap T.pack ctxts) (T.pack msg)
     Partial _ -> Left $ "incomplete input"
     Done _ r -> Right r
 

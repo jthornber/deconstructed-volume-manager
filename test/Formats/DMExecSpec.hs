@@ -1,8 +1,8 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Formats.DMExecSpec (
         spec
     ) where
+
+import Protolude
 
 import Data.Attoparsec.Text
 import Data.Either

@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module DeviceMapper.LowLevelTypes (
     Sector,
     DeviceId(..),
@@ -10,6 +8,7 @@ module DeviceMapper.LowLevelTypes (
 
     ) where
 
+import Protolude
 import Control.Monad
 import Data.Aeson
 import Data.Aeson.Types

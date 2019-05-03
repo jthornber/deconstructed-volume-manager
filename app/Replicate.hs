@@ -4,6 +4,7 @@ module Replicate (
     replicateCmd
     ) where
 
+import Protolude
 import Control.Concurrent.Async
 import Control.Exception
 import Data.Aeson
@@ -58,19 +59,19 @@ verifyRegions rs = do
     then return $ Right ()
     else return $ Left ["Hashes differ"]
     -}
-verifyRegions = error "not implemented"
+verifyRegions = undefined
 
 --------------------------------------
 -- Top level
 fail' :: IO ()
 fail' = exitWith (ExitFailure 1)
 
-barf :: String -> IO ()
+barf :: Text -> IO ()
 barf msg = putStrLn msg >> fail'
 
 usage :: IO ()
 usage = do
-    putStrLn "usage: replicate <region file>"
+    putStrLn ("usage: replicate <region file>" :: Text)
     exitWith (ExitFailure 1)
 
 {-
@@ -90,6 +91,6 @@ main = do
                     Right () -> putStrLn "Verified!"
                     -}
 
-replicateCmd :: [String] -> IO ()
-replicateCmd _ = putStrLn "Hello, world!"
+replicateCmd :: [Text] -> IO ()
+replicateCmd _ = putStrLn ("Hello, world!" :: Text)
 

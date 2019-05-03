@@ -2,6 +2,8 @@ module Commands.DMCompileSpec (
     spec
     ) where
 
+import Protolude
+
 import Test.Hspec
 import Test.QuickCheck
 import Control.Exception (evaluate)

@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module DeviceMapper.HighLevelTypes (
     ErrorTarget(..),
     LinearTarget(..),
@@ -13,6 +11,8 @@ module DeviceMapper.HighLevelTypes (
     Device(..),
     devPath
     ) where
+
+import Protolude
 
 import Control.Monad
 import Data.Aeson hiding (Error)
@@ -218,7 +218,7 @@ data Target =
 addKind :: (ToJSON a) => Text -> a -> Value
 addKind k v = case toJSON v of
     (Object o) -> Object $ H.insert "kind" (String k) o
-    _ -> error "not an object"
+    _ -> undefined -- "not an object"
 
 instance ToJSON Target where
     toJSON (ErrorType v) = addKind "error" v

@@ -1,9 +1,10 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Commands.DMExec (
         dmExecCmd
     ) where
+
+import Protolude
 
 import Control.Applicative
 import Control.Lens
@@ -91,7 +92,7 @@ jmpLabel :: Text -> VM (Maybe Int)
 jmpLabel name = do
     vm <- get
     case H.lookup name (vm ^. vmLabels) of
-        Nothing -> error "no such label"
+        Nothing -> undefined -- "no such label"
         Just pc -> do
             setPC pc
             return Nothing
@@ -115,7 +116,7 @@ noResult fn = (dm fn) >> return Nothing
 
 -- FIXME: handle error
 insertPair :: Text -> Value -> [Object] -> [Object]
-insertPair _ _ [] = error "can't insert pair"
+insertPair _ _ [] = undefined -- "can't insert pair"
 insertPair k v (o:os) = (H.insert k v o) : os
 
 addResult :: (ToJSON a) => Text -> (Fd -> IO (IoctlResult a)) -> VM (Maybe Int)
@@ -132,7 +133,7 @@ pushObject os = H.empty : os
 
 -- FIXME: this error should be propogated
 popObject :: Text -> [Object] -> [Object]
-popObject _ [_] = error "can't pop object"
+popObject _ [_] = undefined -- "can't pop object"
 popObject key (v:o:os) = (H.insert key (Object v) o) : os
 
 -- Returns the exit code if execution has completed.
@@ -180,7 +181,9 @@ execCode = do
 runVM :: I.Program -> IO (Int, Value)
 runVM code = withControlDevice $ \ctrl -> do
     (exitCode, vm) <- runStateT execCode (newState ctrl code)
-    return (exitCode, Object . head $ vm ^. vmObj)
+    case vm ^. vmObj of
+        [o] -> pure (exitCode, Object o)
+        _   -> undefined -- throw exeception
 
 -- FIXME: I don't think these belong here
 tableLinePrepare :: TableLine -> Text
@@ -190,28 +193,28 @@ tableLinePrepare (TableLine n len txt) = T.concat [n, " ", T.pack $ show len, " 
 
 errorTarget len = TableLine "error" len ""
 
+pError :: Text -> IO ()
+pError = pError
+
 usage :: IO ExitCode
 usage = do
-    hPutStrLn stderr "usage: dm-exec <program file>"
+    pError "usage: dm-exec <program file>"
     return $ ExitFailure 1
 
-readProgram :: FilePath -> IO (Either Text I.Program)
-readProgram path = parseAsm <$> T.readFile path
+readProgram :: Text -> IO (Either Text I.Program)
+readProgram path = parseAsm <$> T.readFile (T.unpack path)
 
 dmExecCmd :: [Text] -> IO ExitCode
-dmExecCmd args = do
-    if length args /= 1
-    then usage
-    else do
-        eprg <- readProgram . T.unpack . head $ args
-        case eprg of
-            Left err -> do
-                hPutStr stderr "Invalid program: "
-                T.hPutStrLn stderr err
-                pure $ ExitFailure 1
-            Right program -> do
-                LS.putStrLn . encodePretty $ program
-                pure ExitSuccess
+dmExecCmd [path] = do
+    eprg <- readProgram path
+    case eprg of
+        Left err -> do
+            pError "Invalid program: "
+            pError err
+            pure $ ExitFailure 1
+        Right program -> do
+            LS.putStrLn . encodePretty $ program
+            pure ExitSuccess
 
                 {-
                 (exitCode, obj) <- runVM program

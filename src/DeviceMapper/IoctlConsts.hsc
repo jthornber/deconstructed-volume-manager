@@ -24,6 +24,8 @@ module DeviceMapper.IoctlConsts (
     dmTargetSpecSize
     ) where
 
+import Protolude
+import qualified Data.Text as T
 import Data.Word
 import Foreign.C.Types
 
@@ -46,12 +48,12 @@ dmNameLen, dmUUIDLen :: Int
 dmNameLen = #const DM_NAME_LEN
 dmUUIDLen = #const DM_UUID_LEN
 
-dmDir, dmControlNode :: String
-dmDir = #const_str DM_DIR
-dmControlNode = #const_str DM_CONTROL_NODE
+dmDir, dmControlNode :: Text
+dmDir = T.pack $ #const_str DM_DIR
+dmControlNode = T.pack $ #const_str DM_CONTROL_NODE
 
-dmControlDev :: FilePath
-dmControlDev = concat ["/dev/", dmDir, "/", dmControlNode]
+dmControlDev :: Text
+dmControlDev = mconcat ["/dev/", dmDir, "/", dmControlNode]
 
 dmVersionIoctl :: CInt
 dmVersionIoctl = #const DM_VERSION

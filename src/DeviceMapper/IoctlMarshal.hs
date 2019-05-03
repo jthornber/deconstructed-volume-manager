@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module DeviceMapper.IoctlMarshal (
         Version(..),
     putVersionIoctl,
@@ -38,7 +36,7 @@ module DeviceMapper.IoctlMarshal (
     getEnoughSpace
     ) where
 
-import Debug.Trace
+import Protolude hiding (putByteString)
 import DeviceMapper.LowLevelTypes
 import DeviceMapper.IoctlConsts
 
@@ -84,7 +82,7 @@ putZeroes n = sequence_ (replicate n zero)
 putFixedWidthString :: Text -> Int -> Put
 putFixedWidthString str width = do
     if len > width
-    then error "text field too large"
+    then undefined -- "text field too large"
     else do
         putByteString (T.encodeUtf8 str)
         putZeroes (width - len)
@@ -332,7 +330,7 @@ calcOffsets xs = loop [0] xs
     where
         loop acc [] = reverse acc
         loop xs@(x:_) (y:ys) = loop (x + y : xs) ys
-        loop _ _ = error "can't happen"
+        loop _ _ = undefined -- "can't happen"
 
 putLoadTableIoctl :: Text -> Text -> [TableLine] -> Put
 putLoadTableIoctl name uuid ts = do
@@ -375,8 +373,5 @@ putTableTableIoctl name uuid size = do
 
 getTableTableIoctl :: Get [TableLine]
 getTableTableIoctl = getStatusTableIoctl
-
-traceIt :: (Show a) => a -> a
-traceIt x = trace (show x) x
 
 ----------------------------------------

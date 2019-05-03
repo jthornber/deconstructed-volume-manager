@@ -16,9 +16,12 @@ module DeviceMapper.Ioctl (
     tableTable
     ) where
 
+import Protolude
+
 import Control.Exception
 import Data.Binary.Get
 import Data.Binary.Put
+import qualified Data.Text as T
 import Data.Word
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LS
@@ -37,8 +40,8 @@ import qualified Data.Text as T
 ------------------------------------------
 -- Data.Binary.Put wants lazy bytestrings, useCStringLen wants strict.
 -- I'd prefer to use strict.
-toStrict :: LS.ByteString -> BS.ByteString
-toStrict = BS.concat . LS.toChunks
+toStrict' :: LS.ByteString -> BS.ByteString
+toStrict' = BS.concat . LS.toChunks
 
 toLazy :: BS.ByteString -> LS.ByteString
 toLazy = LS.fromStrict
@@ -74,7 +77,7 @@ runCmd' (Fd controlDev) cmd s@(buffer, _) = do
 -- Returns the ioctl error code, or the populated payload
 runCmd :: Fd -> CInt -> Put -> Get a -> IO (IoctlResult a)
 runCmd ctrl cmd packer unpacker = do
-    r <- BS.useAsCStringLen (toStrict $ runPut packer) $ runCmd' ctrl cmd
+    r <- BS.useAsCStringLen (toStrict' $ runPut packer) $ runCmd' ctrl cmd
     case r of
         IoctlSuccess bs -> return . IoctlSuccess . runGet unpacker . toLazy $ bs
         IoctlNoSpace -> return $ IoctlNoSpace
@@ -95,7 +98,7 @@ runCmdAcross ctrl cmd mkPacker unpacker sizes = withBufferSizes run sizes
 
 withControlDevice :: (Fd -> IO a) -> IO a
 withControlDevice fn =
-    bracket (openFd dmControlDev ReadWrite Nothing openFlags) closeFd fn
+    bracket (openFd (T.unpack dmControlDev) ReadWrite Nothing openFlags) closeFd fn
     where
         openFlags = defaultFileFlags {exclusive = True}
 

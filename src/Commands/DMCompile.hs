@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 
@@ -9,6 +8,8 @@ module Commands.DMCompile (
     uniq
     ) where
 
+import Protolude
+
 import Control.Monad.State
 import qualified DeviceMapper.Instructions as I
 import DeviceMapper.LowLevelTypes
@@ -18,7 +19,7 @@ import Data.Aeson
 import Data.Aeson.Encode.Pretty
 import qualified Data.ByteString.Lazy.Char8 as L8
 import Data.Foldable
-import Data.List
+import qualified Data.List as L
 import Data.Map.Strict (Map)
 import qualified Data.Map as M
 import Data.Maybe
@@ -32,7 +33,6 @@ import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Util
 import GHC.Generics
 import System.Exit
-import System.IO
 
 ----------------------------------------------
 
@@ -269,10 +269,10 @@ tidyLabels instrs = S.fromList tidied
         aliases = foldr insertAliases M.empty chunks
 
         insertAliases :: [I.Instruction] -> Map Text Text -> Map Text Text
-        insertAliases [] z = error "empty chunk"
+        insertAliases [] z = undefined -- "empty chunk"
         insertAliases [x] z = z
         insertAliases ((I.Label v):rst) z = foldr (\(I.Label k) -> M.insert k v) z rst
-        insertAliases _ _ = error "not a label"
+        insertAliases _ _ = undefined -- "not a label"
 
         isLabel :: I.Instruction -> Bool
         isLabel (I.Label _) = True
@@ -280,7 +280,7 @@ tidyLabels instrs = S.fromList tidied
 
         chunks = unfoldr getChunk lst
         getChunk [] = Nothing
-        getChunk xs = Just . span isLabel . dropWhile (not . isLabel) $ xs
+        getChunk xs = Just . L.span isLabel . dropWhile (not . isLabel) $ xs
 
         tidied = concatMap tidy lst
 
@@ -306,36 +306,37 @@ toProgram ir = I.mkProgram (toList $ tidyLabels (evalState (linearise ir) 0))
 
 --------------------------------------------
 
+pError :: Text -> IO ()
+pError = hPutStrLn stderr
+
 usage :: IO ExitCode
 usage = do
-    hPutStrLn stderr "usage: dm-compile <device description file>"
+    pError "usage: dm-compile <device description file>"
     return $ ExitFailure 1
 
-readDevices :: FilePath -> IO (Either String TableMap)
+readDevices :: Text -> IO (Either Text TableMap)
 readDevices path = do
-    contents <- L8.readFile path
+    contents <- L8.readFile $ T.unpack path
     case eitherDecode contents of
-        Left err -> return $ Left err
+        Left err -> return $ Left $ T.pack err
         Right xs -> return . Right . M.fromList $ xs
 
 -- FIXME: use EitherT a b IO ?
 dmCompileCmd :: [Text] -> IO ExitCode
-dmCompileCmd args = do
-    if length args /= 1
-    then usage
-    else do
-        edevs <- readDevices . T.unpack . head $ args
-        case edevs of
-            Left err -> do
-                hPutStr stderr "Invalid device description: "
-                hPutStrLn stderr err
-                return $ ExitFailure 1
-            Right devs -> do
-                case activate devs of
-                    Nothing -> do
-                        hPutStrLn stderr "Compile failed.  Recursive devs?"
-                        return (ExitFailure 1)
-                    Just ir -> do
-                        L8.putStrLn . encodePretty . toProgram $ ir
-                        return ExitSuccess
+dmCompileCmd [path] = do
+    edevs <- readDevices path
+    case edevs of
+        Left err -> do
+            pError "Invalid device description: "
+            pError err
+            return $ ExitFailure 1
+        Right devs -> do
+            case activate devs of
+                Nothing -> do
+                    pError "Compile failed.  Recursive devs?"
+                    return (ExitFailure 1)
+                Just ir -> do
+                    L8.putStrLn . encodePretty . toProgram $ ir
+                    return ExitSuccess
+dmCompileCmd _ = usage
 

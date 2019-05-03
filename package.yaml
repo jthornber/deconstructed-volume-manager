@@ -33,6 +33,7 @@ dependencies:
 - lens
 - mtl
 - prettyprinter
+- protolude
 - stm
 - text
 - typed-process
@@ -41,12 +42,17 @@ dependencies:
 
 library:
   source-dirs: src
+  ghc-options:
+    - -XNoImplicitPrelude
+    - -XOverloadedStrings
 
 executables:
   dvm:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
+    - -XNoImplicitPrelude
+    - -XOverloadedStrings
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
@@ -58,6 +64,8 @@ tests:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
+    - -XNoImplicitPrelude
+    - -XOverloadedStrings
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

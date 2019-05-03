@@ -1,6 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 
 module DeviceMapper.Instructions (
     Address,
@@ -9,6 +7,8 @@ module DeviceMapper.Instructions (
     programInstructions,
     mkProgram
     ) where
+
+import Protolude
 
 import qualified Data.Array.IArray as A
 
