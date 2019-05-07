@@ -58,30 +58,30 @@ runCmd' :: Fd -> CInt -> CStringLen -> IO (IoctlResult BS.ByteString)
 runCmd' (Fd controlDev) cmd s@(buffer, _) = do
         r <- c_ioctl controlDev cmd buffer
         if r /= 0
-        then return $ IoctlFail r
+        then pure $ IoctlFail r
         else do
             bs <- BS.packCStringLen s
             let space = runGet getEnoughSpace (toLazy bs)
             if space
-            then return $ IoctlSuccess bs
-            else return $ IoctlNoSpace
+            then pure $ IoctlSuccess bs
+            else pure $ IoctlNoSpace
 
 -- Returns the ioctl error code, or the populated payload
 runCmd :: Fd -> CInt -> Put -> Get a -> IO (IoctlResult a)
 runCmd ctrl cmd packer unpacker = do
     r <- BS.useAsCStringLen (toStrict' $ runPut packer) $ runCmd' ctrl cmd
     case r of
-        IoctlSuccess bs -> return . IoctlSuccess . runGet unpacker . toLazy $ bs
-        IoctlNoSpace -> return $ IoctlNoSpace
-        IoctlFail err -> return $ IoctlFail err
+        IoctlSuccess bs -> pure . IoctlSuccess . runGet unpacker . toLazy $ bs
+        IoctlNoSpace -> pure $ IoctlNoSpace
+        IoctlFail err -> pure $ IoctlFail err
 
 withBufferSizes :: (Int -> IO (IoctlResult a)) -> [Int] -> IO (IoctlResult a)
-withBufferSizes _ [] = return IoctlNoSpace
+withBufferSizes _ [] = pure IoctlNoSpace
 withBufferSizes fn (x:xs) = do
     r <- fn x
     case r of
         IoctlNoSpace -> withBufferSizes fn xs
-        _ -> return r
+        _ -> pure r
 
 runCmdAcross :: Fd -> CInt -> (Int -> Put) -> Get a -> [Int] -> IO (IoctlResult a)
 runCmdAcross ctrl cmd mkPacker unpacker sizes = withBufferSizes run sizes

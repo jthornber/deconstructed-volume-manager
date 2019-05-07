@@ -197,7 +197,7 @@ activateMany tm (dev : rest) unpick = do
     activateRestIR <- activateMany tm rest (dev:unpick)
     let unpickBadCreateIR = deactivateMany unpick
     let unpickBadLoadIR = deactivateMany (dev:unpick)
-    return $
+    pure $
         Begin [Create dev,
                Test (Begin [Load dev table,
                             Test activateRestIR
@@ -219,35 +219,35 @@ mkLabel :: Labeller Text
 mkLabel = do
     n <- get
     put (n + 1)
-    return (T.pack . show $ n)
+    pure (T.pack . show $ n)
 
 wrap :: a -> Seq a
 wrap = S.singleton
 
 -- FIXME: missing cases
 linearise :: IR -> Labeller (Seq I.Instruction)
-linearise (Create dev) = return . wrap $ I.Create dev
-linearise (Remove dev) = return . wrap $ I.Remove dev
-linearise (Load dev table) = return . wrap $ I.Load dev table
-linearise (Suspend dev) = return . wrap $ I.Suspend dev
-linearise (Resume dev) = return . wrap $ I.Remove dev
+linearise (Create dev) = pure . wrap $ I.Create dev
+linearise (Remove dev) = pure . wrap $ I.Remove dev
+linearise (Load dev table) = pure . wrap $ I.Load dev table
+linearise (Suspend dev) = pure . wrap $ I.Suspend dev
+linearise (Resume dev) = pure . wrap $ I.Remove dev
 linearise (Test good bad) = do
     bad_label <- mkLabel
     out_label <- mkLabel
     good_code <- linearise good
     bad_code <- linearise bad
-    return $
+    pure $
         wrap (I.JmpFail bad_label) ><
         good_code ><
         wrap (I.Jmp out_label) ><
         wrap (I.Label bad_label) ><
         bad_code ><
         wrap (I.Label out_label)
-linearise (Noop) = return S.empty
-linearise (Fail n) = return . wrap $ I.Exit n
+linearise (Noop) = pure S.empty
+linearise (Fail n) = pure . wrap $ I.Exit n
 linearise (Begin irs) = do
     codes <- mapM linearise irs
-    return $ foldr (><) S.empty codes
+    pure $ foldr (><) S.empty codes
 
 -- We can get multiple labels at the same point in the code because
 -- of empty success branches.
@@ -303,14 +303,14 @@ pError = hPutStrLn stderr
 usage :: IO ExitCode
 usage = do
     pError "usage: dm-compile <device description file>"
-    return $ ExitFailure 1
+    pure $ ExitFailure 1
 
 readDevices :: Text -> IO (Either Text TableMap)
 readDevices path = do
     contents <- L8.readFile $ T.unpack path
     case eitherDecode contents of
-        Left err -> return $ Left $ T.pack err
-        Right xs -> return . Right . M.fromList $ xs
+        Left err -> pure $ Left $ T.pack err
+        Right xs -> pure . Right . M.fromList $ xs
 
 -- FIXME: use EitherT a b IO ?
 dmCompileCmd :: [Text] -> IO ExitCode
@@ -320,14 +320,14 @@ dmCompileCmd [path] = do
         Left err -> do
             pError "Invalid device description: "
             pError err
-            return $ ExitFailure 1
+            pure $ ExitFailure 1
         Right devs -> do
             case activate devs of
                 Nothing -> do
                     pError "Compile failed.  Recursive devs?"
-                    return (ExitFailure 1)
+                    pure (ExitFailure 1)
                 Just ir -> do
                     L8.putStrLn . encodePretty . toProgram $ ir
-                    return ExitSuccess
+                    pure ExitSuccess
 dmCompileCmd _ = usage
 

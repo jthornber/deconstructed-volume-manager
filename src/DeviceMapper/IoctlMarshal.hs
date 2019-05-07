@@ -85,7 +85,7 @@ putFixedWidthString str width = do
         len = T.length str
 
 getFixedWidthString :: Int -> Get Text
-getFixedWidthString n = getByteString n >>= (return . decodeBytes)
+getFixedWidthString n = getByteString n >>= (pure . decodeBytes)
     where
         decodeBytes = T.decodeUtf8 . BS.pack . trim . BS.unpack
         trim = takeWhile (/= 0)
@@ -94,10 +94,10 @@ putCString :: Text -> PutM Int
 putCString txt = do
     written <- loop 0 (T.unpack txt)
     putWord8 0
-    return (written + 1)
+    pure (written + 1)
     where
         -- FIXME: rewrite as a mapM_
-        loop written [] = return written
+        loop written [] = pure written
         loop written (x:xs) = do
             putWord8 (fromIntegral $ ord x)
             loop (written + 1) xs
@@ -108,7 +108,7 @@ getCString = loop []
         loop acc = do
             c <- getWord8
             if c == 0
-            then return $ T.pack (reverse acc)
+            then pure $ T.pack (reverse acc)
             else loop (chr (fromIntegral c) : acc)
 
 putVersion :: Version -> Put
@@ -122,7 +122,7 @@ getVersion = do
     ma <- getWord32host
     mi <- getWord32host
     pa <- getWord32host
-    return $ Version ma mi pa
+    pure $ Version ma mi pa
 
 putHeader :: Header -> Int -> Put
 putHeader hdr payloadLen = do
@@ -173,7 +173,7 @@ getHeader = do
     -- padding
     _ <- getByteString 7
 
-    return $ Header {
+    pure $ Header {
         hdrVersion = v,
         hdrDataSize = len,
         hdrDataOffset = structSize,
@@ -188,7 +188,7 @@ getHeader = do
 getEnoughSpace :: Get Bool
 getEnoughSpace = do
     hdr <- getHeader
-    return $ ((hdrFlags hdr) .&. (fromIntegral dmBufferFullFlag)) == 0
+    pure $ ((hdrFlags hdr) .&. (fromIntegral dmBufferFullFlag)) == 0
 
 ----------------------------------------
 
@@ -209,13 +209,13 @@ putVersionIoctl :: Put
 putVersionIoctl = putHeader defaultHeader 0
 
 getVersionIoctl :: Get Version
-getVersionIoctl = getHeader >>= (return . hdrVersion)
+getVersionIoctl = getHeader >>= (pure . hdrVersion)
 
 putRemoveAllIoctl :: Put
 putRemoveAllIoctl = putHeader defaultHeader 0
 
 getRemoveAllIoctl :: Get ()
-getRemoveAllIoctl = getHeader >> return ()
+getRemoveAllIoctl = getHeader >> pure ()
 
 -- FIXME: we're packing zeroes for the resultant payload
 -- which is v. inefficient
@@ -229,16 +229,16 @@ getDeviceInfo = do
     dev <- getWord64host
     offset <- getWord32host
     name <- getCString
-    return $ (dev, offset, name)
+    pure $ (dev, offset, name)
 
 getDeviceInfos :: [DeviceInfo] -> Get [DeviceInfo]
 getDeviceInfos acc = do
     (dev, offset, name) <- lookAhead getDeviceInfo
     if dev == 0
-    then return $ reverse acc
+    then pure $ reverse acc
     else let acc' = DeviceInfo dev name : acc in
         if offset == 0
-        then return . reverse $ acc'
+        then pure . reverse $ acc'
         else do
             skip (fromIntegral offset)
             getDeviceInfos acc'
@@ -264,31 +264,31 @@ putCreateDeviceIoctl :: Text -> Text -> Put
 putCreateDeviceIoctl = putDev 0
 
 getCreateDeviceIoctl :: Get ()
-getCreateDeviceIoctl = return ()
+getCreateDeviceIoctl = pure ()
 
 putRemoveDeviceIoctl :: Text -> Text -> Put
 putRemoveDeviceIoctl = putDev 0
 
 getRemoveDeviceIoctl :: Get ()
-getRemoveDeviceIoctl = return ()
+getRemoveDeviceIoctl = pure ()
 
 putSuspendDeviceIoctl :: Text -> Text -> Put
 putSuspendDeviceIoctl = putDev dmSuspendDeviceFlag
 
 getSuspendDeviceIoctl :: Get ()
-getSuspendDeviceIoctl = return ()
+getSuspendDeviceIoctl = pure ()
 
 putResumeDeviceIoctl :: Text -> Text -> Put
 putResumeDeviceIoctl = putDev 0
 
 getResumeDeviceIoctl :: Get ()
-getResumeDeviceIoctl = return ()
+getResumeDeviceIoctl = pure ()
 
 putClearTableIoctl :: Text -> Text -> Put
 putClearTableIoctl = putDev 0
 
 getClearTableIoctl :: Get ()
-getClearTableIoctl = return ()
+getClearTableIoctl = pure ()
 
 tlSectors :: TableLine -> Word64
 tlSectors (TableLine _ len _) = fromIntegral len
@@ -320,7 +320,7 @@ getTargetSpec = do
     next <- getWord32host
     kind <- getFixedWidthString $ fromIntegral dmMaxTypeName
     args <- getCString
-    return (TableLine kind (fromIntegral sectorSize) args, fromIntegral next)
+    pure (TableLine kind (fromIntegral sectorSize) args, fromIntegral next)
 
 calcOffsets :: [Word64] -> [Word64]
 calcOffsets lens = loop [0] lens
@@ -343,7 +343,7 @@ putLoadTableIoctl name uuid ts = do
         tlSize (TableLine kind _ args) = (fromIntegral dmTargetSpecSize) + 64 + (T.length kind) + (T.length args)
 
 getLoadTableIoctl :: Get ()
-getLoadTableIoctl = return ()
+getLoadTableIoctl = pure ()
 
 putStatusTableIoctl :: Text -> Text -> Int -> Put
 putStatusTableIoctl name uuid size = do
@@ -356,7 +356,7 @@ getStatusTableIoctl = do
     skip (fromIntegral $ hdrDataOffset hdr)
     loop (hdrTargetCount hdr) []
     where
-        loop 0 ts = return . reverse $ ts
+        loop 0 ts = pure . reverse $ ts
         loop n ts = do
             (t, next) <- lookAhead getTargetSpec
             skip next

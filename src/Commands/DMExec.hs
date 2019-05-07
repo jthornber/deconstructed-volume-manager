@@ -73,8 +73,8 @@ getInstr = do
     vm <- get
     let pc = (vm ^. vmPC) in
         if pc > (codeLen $ vm ^. vmCode)
-        then return $ I.Exit 0
-        else return $ (vm ^. vmCode . I.programInstructions) ! pc
+        then pure $ I.Exit 0
+        else pure $ (vm ^. vmCode . I.programInstructions) ! pc
 
 incPC :: VM ()
 incPC = modify (\vm -> vm & vmPC %~ (+ 1))
@@ -89,7 +89,7 @@ jmpLabel name = do
         Nothing -> undefined -- "no such label"
         Just pc -> do
             setPC pc
-            return Nothing
+            pure Nothing
 
 nextInstr :: VM I.Instruction
 nextInstr = getInstr <* incPC
@@ -100,13 +100,13 @@ dm fn = do
     case dmResult of
         IoctlSuccess _ -> do
             modify (\vm -> vm & vmLastIoctlFailed .~ False)
-            return dmResult
+            pure dmResult
         _ -> do
             modify (\vm -> vm & vmLastIoctlFailed .~ True)
-            return dmResult
+            pure dmResult
 
 noResult :: (Fd -> IO (IoctlResult ())) -> VM (Maybe Int)
-noResult fn = (dm fn) >> return Nothing
+noResult fn = (dm fn) >> pure Nothing
 
 -- FIXME: handle error
 insertPair :: Text -> Value -> [Object] -> [Object]
@@ -119,8 +119,8 @@ addResult key fn = do
     case r of
         IoctlSuccess v -> do
             modify (\vm -> vm & vmObj %~ insertPair key (toJSON v))
-            return Nothing
-        _ -> return Nothing
+            pure Nothing
+        _ -> pure Nothing
 
 pushObject :: [Object] -> [Object]
 pushObject os = H.empty : os
@@ -141,24 +141,24 @@ step' (I.Resume devId) = noResult $ resumeDevice (devName devId) (diUUID devId)
 step' (I.Load devId table) = noResult $ loadTable (devName devId) (diUUID devId) table
 step' (I.InfoQ key devId) = addResult key $ statusTable (devName devId) (diUUID devId)
 step' (I.TableQ key devId) = addResult key $ tableTable (devName devId) (diUUID devId)
-step' (I.Exit code) = return (Just code)
+step' (I.Exit code) = pure (Just code)
 step' I.BeginObject = do
     modify $ \vm -> vm & vmObj %~ pushObject
-    return Nothing
+    pure Nothing
 step' (I.EndObject key) = do
     modify $ \vm -> vm & vmObj %~ popObject key
-    return Nothing
+    pure Nothing
 step' (I.Literal key val) = do
     modify $ \vm -> vm & vmObj %~ insertPair key (toJSON val)
-    return Nothing
+    pure Nothing
 step' (I.Jmp label) = jmpLabel label
 step' (I.JmpFail name) = do
     vm <- get
     if vm ^. vmLastIoctlFailed
     then jmpLabel name
-    else return Nothing
+    else pure Nothing
 
-step' (I.Label _) = return Nothing
+step' (I.Label _) = pure Nothing
 
 -- FIXME: we need a way of reporting the ioctl error codes
 step :: VM (Maybe Int)
@@ -169,7 +169,7 @@ execCode :: VM Int
 execCode = do
     mexit <- step
     case mexit of
-        (Just code) -> return code
+        (Just code) -> pure code
         Nothing -> execCode
 
 runVM :: I.Program -> IO (Int, Value)
@@ -193,7 +193,7 @@ pError = pError
 usage :: IO ExitCode
 usage = do
     pError "usage: dm-exec <program file>"
-    return $ ExitFailure 1
+    pure $ ExitFailure 1
 
 readProgram :: Text -> IO (Either Text I.Program)
 readProgram path = parseAsm <$> T.readFile (T.unpack path)
@@ -214,8 +214,8 @@ dmExecCmd [path] = do
                 (exitCode, obj) <- runVM program
                 LS.putStrLn . encodePretty $ obj
                 if exitCode == 0
-                then return ExitSuccess
-                else return $ ExitFailure exitCode
+                then pure ExitSuccess
+                else pure $ ExitFailure exitCode
                 -}
 
 -------------------------------------------

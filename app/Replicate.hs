@@ -36,7 +36,7 @@ instance FromJSON Region
 readRegions :: FilePath -> IO (Maybe [Region])
 readRegions path = do
     txt <- L8.readFile path
-    return (decode txt)
+    pure (decode txt)
 
 showRegions :: FilePath -> IO ()
 showRegions path = readRegions path >>= L8.putStrLn . encode
@@ -49,8 +49,8 @@ verifyRegions :: [Region] -> IO (Either [String] ())
 verifyRegions rs = do
     hashes <- mapConcurrently hashRegion rs
     if all (== (head hashes)) (tail hashes)
-    then return $ Right ()
-    else return $ Left ["Hashes differ"]
+    then pure $ Right ()
+    else pure $ Left ["Hashes differ"]
     -}
 verifyRegions = undefined
 

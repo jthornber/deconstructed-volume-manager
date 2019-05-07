@@ -67,7 +67,7 @@ instance FromJSON Instruction where
     parseJSON (Object v) = do
         o <- getOp v
         case o of
-            "remove-all" -> return RemoveAll
+            "remove-all" -> pure RemoveAll
             "list" -> List <$> v .: "key"
             "create" -> Create <$> v .: "id"
             "remove" -> Remove <$> v .: "id"
@@ -76,7 +76,7 @@ instance FromJSON Instruction where
             "load" -> Load <$> v .: "id" <*> v .: "targets"
             "info" -> InfoQ <$> v .: "key" <*> v .: "id"
             "table" -> TableQ <$> v .: "key" <*> v .: "id"
-            "begin-object" -> return BeginObject
+            "begin-object" -> pure BeginObject
             "end-object" -> EndObject <$> v .: "key"
             "literal" -> Literal <$> v .: "key" <*> v .: "value"
             "jmp" -> Jmp <$> v .: "label"
