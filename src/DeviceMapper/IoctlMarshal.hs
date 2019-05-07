@@ -42,16 +42,11 @@ import DeviceMapper.IoctlConsts
 
 import Data.Binary.Get
 import Data.Binary.Put
-import Data.Bits
-import Data.Char
-import Data.Word
 import qualified Data.ByteString as BS
 
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-
-import Foreign.C.Types
 
 ----------------------------------------
 
@@ -74,9 +69,9 @@ data Header = Header {
 } deriving (Eq, Show)
 
 putZeroes :: Int -> Put
-putZeroes n = sequence_ (replicate n zero)
+putZeroes n = sequence_ (replicate n z)
     where
-        zero = putWord8 0
+        z = putWord8 0
 
 -- FIXME: we need a better way of returning errors
 putFixedWidthString :: Text -> Int -> Put
@@ -137,7 +132,7 @@ putHeader hdr payloadLen = do
 
     putWord32host (fromIntegral headerStructSize)
     putWord32host (hdrTargetCount hdr)
-    putInt32host (fromIntegral openCount)
+    putInt32host 0 -- openCount
     putWord32host (hdrFlags hdr)
 
     putWord32host (hdrEvent hdr)
@@ -153,7 +148,6 @@ putHeader hdr payloadLen = do
 
     where
         len = (fromIntegral payloadLen) + headerStructSize
-        openCount = 0
 
 getHeader :: Get Header
 getHeader = do
@@ -163,13 +157,13 @@ getHeader = do
 
     structSize <- getWord32host
     targetCount <- getWord32host
-    openCount <- getInt32host
+    _ <- getInt32host -- openCount
     flags <- getWord32host
 
     event <- getWord32host
 
     -- padding
-    getWord32host
+    _ <- getWord32host
 
     dev <- getWord64host
 
@@ -177,7 +171,7 @@ getHeader = do
     dmUUID <- getFixedWidthString dmUUIDLen
 
     -- padding
-    getByteString 7
+    _ <- getByteString 7
 
     return $ Header {
         hdrVersion = v,
@@ -299,7 +293,10 @@ getClearTableIoctl = return ()
 tlSectors :: TableLine -> Word64
 tlSectors (TableLine _ len _) = fromIntegral len
 
+roundUp :: (Integral a) => a -> a -> a
 roundUp n d = ((n + d - 1) `div` d) * d
+
+calcPadding :: (Integral a) => a -> a -> a
 calcPadding n d = (roundUp n d) - n
 
 putTargetSpec :: (Word64, TableLine) -> Put
@@ -309,7 +306,7 @@ putTargetSpec (sectorStart, TableLine kind sectorSize args) = do
     putWord32host 0
     putWord32host $ fromIntegral next
     putFixedWidthString kind $ fromIntegral dmMaxTypeName
-    putCString args
+    _ <- putCString args
     putZeroes $ calcPadding argsLen 8
     where
         next = dmTargetSpecSize + fromIntegral (roundUp argsLen 8)
@@ -317,16 +314,16 @@ putTargetSpec (sectorStart, TableLine kind sectorSize args) = do
 
 getTargetSpec :: Get (TableLine, Int)
 getTargetSpec = do
-    sectorStart <- getWord64host
+    _ <- getWord64host -- sectorStart
     sectorSize <- getWord64host
-    status <- getWord32host
+    _ <- getWord32host -- status
     next <- getWord32host
     kind <- getFixedWidthString $ fromIntegral dmMaxTypeName
     args <- getCString
     return (TableLine kind (fromIntegral sectorSize) args, fromIntegral next)
 
 calcOffsets :: [Word64] -> [Word64]
-calcOffsets xs = loop [0] xs
+calcOffsets lens = loop [0] lens
     where
         loop acc [] = reverse acc
         loop xs@(x:_) (y:ys) = loop (x + y : xs) ys
@@ -342,7 +339,6 @@ putLoadTableIoctl name uuid ts = do
             hdrUUID = uuid,
             hdrTargetCount = fromIntegral $ length ts
         }
-        offsets = reverse
         dataSize = sum . map tlSize $ ts
         tlSize (TableLine kind _ args) = (fromIntegral dmTargetSpecSize) + 64 + (T.length kind) + (T.length args)
 

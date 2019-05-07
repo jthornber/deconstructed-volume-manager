@@ -14,11 +14,9 @@ module DeviceMapper.HighLevelTypes (
 
 import Protolude
 
-import Control.Monad
 import Data.Aeson hiding (Error)
 import Data.Aeson.Types hiding (Error)
 import qualified Data.HashMap.Strict as H
-import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 import DeviceMapper.LowLevelTypes
@@ -171,6 +169,7 @@ instance ToJSON CachePolicy where
 
 instance FromJSON CachePolicy where
     parseJSON (Object o) = CachePolicy <$> o .: "name" <*> o .: "keys"
+    parseJSON _ = mzero
 
 data CacheTarget = CacheTarget {
     cacheLen :: Sector,
@@ -241,6 +240,7 @@ instance FromJSON Target where
             "thin-pool" -> ThinPoolType <$> parseJSON o
             "thin" -> ThinType <$> parseJSON o
             "cache" -> CacheType <$> parseJSON o
+            _ -> undefined -- "unknown target type"
     parseJSON _ = mzero
 
 devPath :: Device -> Text

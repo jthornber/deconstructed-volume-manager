@@ -26,7 +26,6 @@ module DeviceMapper.IoctlConsts (
 
 import Protolude
 import qualified Data.Text as T
-import Data.Word
 import Foreign.C.Types
 
 #include <sys/ioctl.h>

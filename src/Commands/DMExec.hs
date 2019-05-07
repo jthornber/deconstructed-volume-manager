@@ -6,28 +6,22 @@ module Commands.DMExec (
 
 import Protolude
 
-import Control.Applicative
 import Control.Lens
-import Control.Monad.State
 import Data.Aeson
 import Data.Aeson.Encode.Pretty
 import Data.Array.IArray
 import qualified Data.ByteString.Lazy.Char8 as LS
 import qualified Data.HashMap.Strict as H
-import Data.Maybe
 import qualified DeviceMapper.Instructions as I
 import DeviceMapper.Ioctl
 import DeviceMapper.LowLevelTypes
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 
 import Formats.DMExec
 
-import System.Exit
-import System.IO
 import System.Posix (Fd)
 
 -------------------------------------------
@@ -56,8 +50,8 @@ newState ctrl code = VMState {
     where
         labels = foldr isLabel H.empty (zip (elems $ code ^. I.programInstructions) [0..])
 
-        isLabel (I.Label name, pc) zero = H.insert name pc zero
-        isLabel _ zero = zero
+        isLabel (I.Label name, pc) z = H.insert name pc z
+        isLabel _ z = z
 
 type VM = StateT VMState IO
 
@@ -212,8 +206,8 @@ dmExecCmd [path] = do
             pError "Invalid program: "
             pError err
             pure $ ExitFailure 1
-        Right program -> do
-            LS.putStrLn . encodePretty $ program
+        Right prg -> do
+            LS.putStrLn . encodePretty $ prg
             pure ExitSuccess
 
                 {-

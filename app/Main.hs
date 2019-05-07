@@ -6,8 +6,6 @@ import Commands.DMExec
 import Protolude
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
---import System.Environment
-import System.Exit
 
 commands :: M.Map Text ([T.Text] -> IO ExitCode)
 commands = M.fromList [

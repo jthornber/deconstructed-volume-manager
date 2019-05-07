@@ -13,14 +13,9 @@ import Protolude
 import qualified Data.Array.IArray as A
 
 import qualified Control.Lens as LENS
-import Control.Monad
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Array.IArray
-import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Util
 import DeviceMapper.LowLevelTypes
 
 type Address = Int
@@ -70,8 +65,8 @@ getOp v = v .: "op"
 
 instance FromJSON Instruction where
     parseJSON (Object v) = do
-        op <- getOp v
-        case op of
+        o <- getOp v
+        case o of
             "remove-all" -> return RemoveAll
             "list" -> List <$> v .: "key"
             "create" -> Create <$> v .: "id"
@@ -88,6 +83,7 @@ instance FromJSON Instruction where
             "jmp-fail" -> JmpFail <$> v .: "label"
             "label" -> Label <$> v .: "name"
             "exit" -> Exit <$> v .: "code"
+            _ -> undefined --  "unknown opcode"
     parseJSON _ = mzero
 
 data Program = Program {
@@ -107,4 +103,5 @@ instance ToJSON Program where
 
 instance FromJSON Program where
     parseJSON (Object v) = mkProgram <$> v .: "instructions"
+    parseJSON _ = mzero
 

@@ -5,15 +5,7 @@ module Replicate (
     ) where
 
 import Protolude
-import Control.Concurrent.Async
-import Control.Exception
 import Data.Aeson
-import qualified Data.ByteString.Lazy.Char8 as L8
-import GHC.Generics
-import System.Environment
-import System.Exit
-
-import Lib
 
 -- Regions need to be passed in as a chunk of JSON data
 
@@ -25,6 +17,7 @@ instance FromJSON Page
 --------------------------------------
 -- Regions
 
+{-
 data Region = Region {
     regionPath :: FilePath,
     regionBegin :: Page,
@@ -74,7 +67,6 @@ usage = do
     putStrLn ("usage: replicate <region file>" :: Text)
     exitWith (ExitFailure 1)
 
-{-
 main :: IO ()
 main = do
     args <- getArgs

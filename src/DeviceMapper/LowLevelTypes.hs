@@ -9,14 +9,8 @@ module DeviceMapper.LowLevelTypes (
     ) where
 
 import Protolude
-import Control.Monad
 import Data.Aeson
-import Data.Aeson.Types
-import qualified Data.HashMap.Strict as H
 import Data.Maybe
-import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Word
 
 ------------------------------------------
 

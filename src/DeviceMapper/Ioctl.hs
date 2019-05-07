@@ -18,24 +18,18 @@ module DeviceMapper.Ioctl (
 
 import Protolude
 
-import Control.Exception
 import Data.Binary.Get
 import Data.Binary.Put
 import qualified Data.Text as T
-import Data.Word
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LS
 import DeviceMapper.IoctlConsts
 import DeviceMapper.IoctlMarshal
 import DeviceMapper.LowLevelTypes
-import Foreign
 import Foreign.C.Types
 import Foreign.C.String
-import Foreign.Marshal.Alloc
 import System.Posix.IO
 import System.Posix.Types
-import Data.Text (Text)
-import qualified Data.Text as T
 
 ------------------------------------------
 -- Data.Binary.Put wants lazy bytestrings, useCStringLen wants strict.
@@ -50,8 +44,6 @@ toLazy = LS.fromStrict
 
 foreign import ccall "ioctl"
     c_ioctl :: CInt -> CInt -> Ptr CChar -> IO CInt
-
-data IoctlBuffer
 
 data IoctlResult a =
     IoctlFail CInt |
@@ -136,10 +128,6 @@ resumeDevice name uuid ctrl =
 loadTable :: Text -> Text -> [TableLine] -> Fd -> IO (IoctlResult ())
 loadTable name uuid ts ctrl =
     runCmd ctrl dmLoadTableIoctl (putLoadTableIoctl name uuid ts) getLoadTableIoctl
-
-clearTable :: Text -> Text -> Fd -> IO (IoctlResult ())
-clearTable name uuid ctrl =
-    runCmd ctrl dmClearTableIoctl (putClearTableIoctl name uuid) getClearTableIoctl
 
 statusTable :: Text -> Text -> Fd -> IO (IoctlResult [TableLine])
 statusTable name uuid ctrl =

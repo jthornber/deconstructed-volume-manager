@@ -10,7 +10,6 @@ module Commands.DMCompile (
 
 import Protolude
 
-import Control.Monad.State
 import qualified DeviceMapper.Instructions as I
 import DeviceMapper.LowLevelTypes
 import DeviceMapper.HighLevelTypes
@@ -18,40 +17,37 @@ import DeviceMapper.HighLevelTypes
 import Data.Aeson
 import Data.Aeson.Encode.Pretty
 import qualified Data.ByteString.Lazy.Char8 as L8
-import Data.Foldable
 import qualified Data.List as L
 import Data.Map.Strict (Map)
 import qualified Data.Map as M
-import Data.Maybe
-import Data.Sequence (Seq, (><), (|>), (<|))
+import Data.Sequence (Seq, (><))
 import qualified Data.Sequence as S
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Util
-import GHC.Generics
-import System.Exit
 
 ----------------------------------------------
+
+join' :: [Text] -> Text
+join' = T.intercalate " "
 
 formatError :: ErrorTarget -> TableLine
 formatError (ErrorTarget len) = TableLine "error" len ""
 
+formatLinear :: LinearTarget -> TableLine
 formatLinear (LinearTarget dev b e) =
     TableLine "linear" (e - b) (T.concat [ devPath dev, " ", T.pack $ show b])
 
+formatStriped :: StripedTarget -> TableLine
 formatStriped (StripedTarget l c ds) =
-    TableLine "striped" l (join ([T.pack (show c)] ++ concatMap expand ds))
+    TableLine "striped" l (join' ([T.pack (show c)] ++ concatMap expand ds))
     where
         expand (DeviceOffset d s) = [devPath d, T.pack $ show s]
-        join = T.intercalate (T.pack " ")
 
 formatThinPool :: ThinPoolTarget -> TableLine
 formatThinPool tp = TableLine "thin-pool" (thinPoolLen tp) args
     where
-        args = join ([
+        args = join' ([
                 dev thinPoolMetadataDev,
                 dev thinPoolDataDev,
                 nr thinPoolBlockSize,
@@ -71,40 +67,34 @@ formatThinPool tp = TableLine "thin-pool" (thinPoolLen tp) args
 
         rflag fn = flag (not . fn)
 
-        lit v = T.pack v
         nr fn = T.pack . show . fn $ tp
         dev fn = devPath . fn $ tp
         len = T.pack . show . length
-        join = T.intercalate (T.pack " ")
 
 formatThin :: ThinTarget -> TableLine
 formatThin t = TableLine "thin" (thinLen t) args
     where
-        args = join ([
+        args = join' ([
             dev thinPoolDev,
             nr thinId] ++ (maybeToList (devPath <$> (thinExternalOrigin t))))
-        lit v = T.pack v
         nr fn = T.pack . show . fn $ t
         dev fn = devPath . fn $ t
-        join = T.intercalate (T.pack " ")
 
 formatCache :: CacheTarget -> TableLine
 formatCache c = TableLine "cache" (cacheLen c) args
     where
-        args = join [
+        args = join' [
             dev cacheMetadataDev,
             dev cacheFastDev,
             dev cacheOriginDev,
             nr cacheBlockSize,
             len (cacheFeatures c),
-            join (cacheFeatures c),
+            join' (cacheFeatures c),
             formatPolicyLine (cachePolicy c)]
-        lit v = T.pack v
         nr fn = T.pack . show . fn $ c
         dev fn = devPath . fn $ c
         len = T.pack . show . length
-        join = T.intercalate (T.pack " ")
-        formatPolicyLine (CachePolicy n ks) = join ([n] ++ (concatMap expand ks))
+        formatPolicyLine (CachePolicy n ks) = join' ([n] ++ (concatMap expand ks))
         expand (k, v) = [k, v]
 
 toTableLine :: Target -> TableLine
@@ -124,14 +114,13 @@ toTableLine (CacheType v) = formatCache v
 depsStriped (StripedTarget l c ds) = map (\(DeviceOffset d _) -> d) ds
     where
         expand (DeviceOffset d s) = [devPath d, T.pack $ show s]
-        join = T.intercalate (T.pack " ")
 
 depsThinPool tp = [thinPoolDataDev tp, thinPoolMetadataDev tp]
 depsThin t = [thinPoolDev t] ++ (maybeToList . thinExternalOrigin $ t)
 depsCache c = [ cacheMetadataDev c, cacheFastDev c, cacheOriginDev c]
 
 getTargetDeps :: Target -> [Device]
-getTargetDeps (ErrorType v) = []
+getTargetDeps (ErrorType _) = []
 getTargetDeps (LinearType (LinearTarget d _ _)) = [d]
 getTargetDeps (StripedType v) = depsStriped v
 getTargetDeps (ThinPoolType v) = depsThinPool v
@@ -232,28 +221,30 @@ mkLabel = do
     put (n + 1)
     return (T.pack . show $ n)
 
-s = S.singleton
+wrap :: a -> Seq a
+wrap = S.singleton
 
+-- FIXME: missing cases
 linearise :: IR -> Labeller (Seq I.Instruction)
-linearise (Create dev) = return . s $ I.Create dev
-linearise (Remove dev) = return . s $ I.Remove dev
-linearise (Load dev table) = return . s $ I.Load dev table
-linearise (Suspend dev) = return . s $ I.Suspend dev
-linearise (Resume dev) = return . s $ I.Remove dev
+linearise (Create dev) = return . wrap $ I.Create dev
+linearise (Remove dev) = return . wrap $ I.Remove dev
+linearise (Load dev table) = return . wrap $ I.Load dev table
+linearise (Suspend dev) = return . wrap $ I.Suspend dev
+linearise (Resume dev) = return . wrap $ I.Remove dev
 linearise (Test good bad) = do
     bad_label <- mkLabel
     out_label <- mkLabel
     good_code <- linearise good
     bad_code <- linearise bad
     return $
-        s (I.JmpFail bad_label) ><
+        wrap (I.JmpFail bad_label) ><
         good_code ><
-        s (I.Jmp out_label) ><
-        s (I.Label bad_label) ><
+        wrap (I.Jmp out_label) ><
+        wrap (I.Label bad_label) ><
         bad_code ><
-        s (I.Label out_label)
+        wrap (I.Label out_label)
 linearise (Noop) = return S.empty
-linearise (Fail n) = return . s $ I.Exit n
+linearise (Fail n) = return . wrap $ I.Exit n
 linearise (Begin irs) = do
     codes <- mapM linearise irs
     return $ foldr (><) S.empty codes
