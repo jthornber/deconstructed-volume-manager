@@ -14,7 +14,11 @@ module Formats.DMExec (
     decls,
     instruction,
     bol,
+    labelInstr,
+    labelOrInstr,
     indented,
+    space',
+    endLine,
     foo,
     program
     ) where
@@ -60,13 +64,16 @@ lit txt = tok (string txt) *> pure ()
 foo :: Parser ()
 foo = string "foo" *> pure ()
 
-identifier :: Parser Text
-identifier = tok $ do
+identifierRaw :: Parser Text
+identifierRaw = do
     c <- satisfy isAlpha
     cs <- Data.Attoparsec.Text.takeWhile idChar
     pure $ T.cons c cs
     where
         idChar c = isDigit c || isAlpha c
+
+identifier :: Parser Text
+identifier = tok identifierRaw
 
 doubleQuote :: Parser ()
 doubleQuote = char '"' *> pure ()
@@ -127,8 +134,8 @@ tableDecl = do
 decls :: Parser Declarations
 decls = M.fromList <$> many' (deviceDecl <|> tableDecl)
 
-label :: Parser I.Instruction
-label = char '.' *> (I.Label <$> identifier)
+labelInstr :: Parser I.Instruction
+labelInstr = char '.' *> (I.Label <$> identifierRaw)
 
 key :: Parser Text
 key = quotedString
@@ -155,8 +162,11 @@ tableRef decls = do
 labelRef :: Parser Text
 labelRef = identifier
 
+nonBreakSpace :: Parser ()
+nonBreakSpace = (char ' ' <|> char '\t') >> pure ()
+
 indent :: Parser ()
-indent = many1 (char ' ' <|> char '\t') >> pure ()
+indent = many1 nonBreakSpace >> pure ()
 
 exitCode :: Parser Int
 exitCode = tok decimal
@@ -181,17 +191,20 @@ instruction decls = choice . Protolude.map instr $ [
     ("jmp-fail", I.JmpFail <$> labelRef),
     ("exit", I.Exit <$> exitCode)]
 
-endLine = space' *> (endOfInput <|> endOfLine)
+endLine = (many nonBreakSpace) *> (endOfInput <|> endOfLine)
 
 -- Make sure p doesn't accept whitespace at the start
 bol :: Parser a -> Parser a
 bol p = p <* endLine
 
 indented :: Parser a -> Parser a
-indented p = indent *> p <* endLine
+indented p = indent *> p --  <* endLine
+
+labelOrInstr :: Declarations -> Parser I.Instruction
+labelOrInstr decls = labelInstr <|> (indented $ instruction decls)
 
 instructions :: Declarations -> Parser I.Program
-instructions decls = I.mkProgram <$> many' ((bol label) <|> (indented $ instruction decls))
+instructions decls = I.mkProgram <$> sepBy (labelOrInstr decls) endLine
 
 program :: Parser I.Program
 program = decls >>= instructions
@@ -206,5 +219,3 @@ parseAsm input = case parse program input of
     Done _ r -> Right r
 
 ----------------------------------------------------
-
-

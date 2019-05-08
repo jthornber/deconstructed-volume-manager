@@ -135,6 +135,16 @@ spec = parallel $ do
             it "should accept with trailing space and newline" $
                 parseGood_ (bol foo) "foo  \t  \n"
 
+        describe "label" $ do
+            it "should accept labels at the start of the line" $
+                parseGood (bol labelInstr) ".start" (I.Label "start")
+            it "should reject labels that don't start with a dot" $
+                parseBad (bol labelInstr) "start"
+            it "should reject labels with zero length names" $
+                parseBad (bol labelInstr) ".\n"
+            it "should reject labels with leading space" $
+                parseBad (bol labelInstr) "   .start"
+
         describe "instruction" $ do
             it "should reject an unknown instruction" $
                 parseBad (instruction emptyDecls) "release-monkeys"
@@ -189,10 +199,21 @@ spec = parallel $ do
             it "should accept exit" $
                 parseGood (instruction emptyDecls) "exit 234" $ I.Exit 234
 
+        describe "labelOrInstr" $ do
+            it "should handle a label" $
+                parseGood (labelOrInstr emptyDecls) ".start" $ I.Label "start"
+            it "should handle an instruction" $
+                parseGood (labelOrInstr emptyDecls) "  list \"foo\"" $ I.List "foo"
+            it "should work with sepBy" $
+                parseGood (sepBy (labelOrInstr emptyDecls) endLine)
+                    ".start\n  list \"foo\""
+                    [I.Label "start", I.List "foo"]
+
         describe "program" $ do
             it "should handle empty programs" $ ex 1 (mkProgram [])
             it "should handle just declarations" $ ex 2 (mkProgram [])
             it "should handle no declarations" $ ex 3 (mkProgram [I.List "foo"])
+            it "should handle labels" $ ex 4 (mkProgram [I.Label "start", I.List "foo"])
 
 
 
