@@ -26,6 +26,13 @@ import System.Posix (Fd)
 
 -------------------------------------------
 
+-- FIXME: remove labels as an instruction, they should be purely present in the asm
+
+-- FIXME: add a way of tracing instruction execution
+-- eg, 0 list "foo" -> SUCCESS
+--     1 info "bar" -> FAIL (EINVAL)
+--     2 jmp 1
+
 data VMState = VMState {
    _vmCtrl :: Fd,
    _vmCode :: I.Program,
@@ -90,9 +97,6 @@ jmpLabel name = do
         Just pc -> do
             setPC pc
             pure Nothing
-
-nextInstr :: VM I.Instruction
-nextInstr = getInstr <* incPC
 
 dm :: (Fd -> IO (IoctlResult a)) -> VM (IoctlResult a)
 dm fn = do
@@ -179,13 +183,7 @@ runVM code = withControlDevice $ \ctrl -> do
         [o] -> pure (exitCode, Object o)
         _   -> undefined -- throw exeception
 
--- FIXME: I don't think these belong here
-tableLinePrepare :: TableLine -> Text
-tableLinePrepare (TableLine n len txt) = T.concat [n, " ", T.pack $ show len, " ", txt]
-
 --------------------------------------------------
-
-errorTarget len = TableLine "error" len ""
 
 pError :: Text -> IO ()
 pError = pError
@@ -207,15 +205,11 @@ dmExecCmd [path] = do
             pError err
             pure $ ExitFailure 1
         Right prg -> do
-            LS.putStrLn . encodePretty $ prg
-            pure ExitSuccess
-
-                {-
-                (exitCode, obj) <- runVM program
-                LS.putStrLn . encodePretty $ obj
-                if exitCode == 0
-                then pure ExitSuccess
-                else pure $ ExitFailure exitCode
-                -}
+            (exitCode, obj) <- runVM prg
+            LS.putStrLn . encodePretty $ obj
+            if exitCode == 0
+            then pure ExitSuccess
+            else pure $ ExitFailure exitCode
+dmExecCmd _ = usage
 
 -------------------------------------------
