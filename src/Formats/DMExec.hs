@@ -4,6 +4,7 @@ module Formats.DMExec (
 
     -- only exported for testing
     Declarations,
+    AsmInstruction (..),
     lit,
     space',
     tok,
@@ -146,8 +147,13 @@ tableDecl = do
     d <- table
     pure (var, d)
 
+decl :: Parser (Text, Decl)
+decl = do
+    _ <- many blankLine
+    deviceDecl <|> tableDecl
+
 decls :: Parser Declarations
-decls = M.fromList <$> many' (deviceDecl <|> tableDecl)
+decls = M.fromList <$> many' decl
 
 labelInstr :: Parser AsmInstruction
 labelInstr = char '.' *> (Label <$> identifierRaw)
@@ -217,8 +223,16 @@ bol p = p <* endLine
 indented :: Parser a -> Parser a
 indented p = indent *> p
 
+blankLine :: Parser ()
+blankLine = do
+    _ <- many nonBreakSpace
+    endOfLine
+    pure ()
+
 labelOrInstr :: Declarations -> Parser AsmInstruction
-labelOrInstr ds = labelInstr <|> (indented $ instruction ds)
+labelOrInstr ds = do
+    _ <- many (Data.Attoparsec.Text.try blankLine)
+    labelInstr <|> (indented $ instruction ds)
 
 instructions :: Declarations -> Parser [AsmInstruction]
 instructions ds = sepBy (labelOrInstr ds) endLine

@@ -16,7 +16,7 @@ import Test.QuickCheck
 import Control.Exception (evaluate)
 
 import DeviceMapper.LowLevelTypes
-import DeviceMapper.Instructions as I
+import qualified DeviceMapper.Instructions as I
 import Formats.DMExec
 import Data.List
 
@@ -137,7 +137,7 @@ spec = parallel $ do
 
         describe "label" $ do
             it "should accept labels at the start of the line" $
-                parseGood (bol labelInstr) ".start" (I.Label "start")
+                parseGood (bol labelInstr) ".start" (Label "start")
             it "should reject labels that don't start with a dot" $
                 parseBad (bol labelInstr) "start"
             it "should reject labels with zero length names" $
@@ -150,71 +150,74 @@ spec = parallel $ do
                 parseBad (instruction emptyDecls) "release-monkeys"
 
             it "should accept remove-all" $
-                parseGood (instruction emptyDecls) "remove-all" I.RemoveAll
+                parseGood (instruction emptyDecls) "remove-all" RemoveAll
 
             it "should accept list" $
-                parseGood (instruction emptyDecls) "list \"foo\"" (I.List "foo")
+                parseGood (instruction emptyDecls) "list \"foo\"" (List "foo")
 
             it "should accept create" $
-                parseGood (instruction decls1) "create foo" (I.Create (DeviceId "foobar" Nothing))
+                parseGood (instruction decls1) "create foo" (Create (DeviceId "foobar" Nothing))
 
             it "should accept remove" $
-                parseGood (instruction decls1) "remove foo" (I.Remove (DeviceId "foobar" Nothing))
+                parseGood (instruction decls1) "remove foo" (Remove (DeviceId "foobar" Nothing))
 
             it "should accept suspend" $
-                parseGood (instruction decls1) "suspend foo" (I.Suspend (DeviceId "foobar" Nothing))
+                parseGood (instruction decls1) "suspend foo" (Suspend (DeviceId "foobar" Nothing))
 
             it "should accept resume" $
-                parseGood (instruction decls1) "resume foo" (I.Resume (DeviceId "foobar" Nothing))
+                parseGood (instruction decls1) "resume foo" (Resume (DeviceId "foobar" Nothing))
 
             it "should accept load" $
                 parseGood (instruction decls2) "load foo table" $
-                    I.Load (DeviceId "foo" Nothing) [TableLine "linear" 1024 "/dev/sdc 0"]
+                    Load (DeviceId "foo" Nothing) [TableLine "linear" 1024 "/dev/sdc 0"]
 
             it "should accept info" $
                 parseGood (instruction decls1) "info \"clang\" foo"
-                    (I.InfoQ "clang" (DeviceId "foobar" Nothing))
+                    (InfoQ "clang" (DeviceId "foobar" Nothing))
 
 
             it "should accept table" $
                 parseGood (instruction decls1) "table \"clang\" foo"
-                    (I.TableQ "clang" (DeviceId "foobar" Nothing))
+                    (TableQ "clang" (DeviceId "foobar" Nothing))
 
             it "should accept begin" $
-                parseGood (instruction emptyDecls) "begin" I.BeginObject
+                parseGood (instruction emptyDecls) "begin" BeginObject
 
             it "should accept end" $
-                parseGood (instruction emptyDecls) "end \"kelp\"" (I.EndObject "kelp")
+                parseGood (instruction emptyDecls) "end \"kelp\"" (EndObject "kelp")
 
             it "should accept literals" $
                 parseGood (instruction emptyDecls) "literal \"empire\" \"dragon\"" $
-                    I.Literal "empire" "dragon"
+                    Literal "empire" "dragon"
 
             it "should accept jmp" $
-                parseGood (instruction emptyDecls) "jmp high" $ I.Jmp "high"
+                parseGood (instruction emptyDecls) "jmp high" $ Jmp "high"
 
             it "should accept jmp-fail" $
-                parseGood (instruction emptyDecls) "jmp-fail high" $ I.JmpFail "high"
+                parseGood (instruction emptyDecls) "jmp-fail high" $ JmpFail "high"
 
             it "should accept exit" $
-                parseGood (instruction emptyDecls) "exit 234" $ I.Exit 234
+                parseGood (instruction emptyDecls) "exit 234" $ Exit 234
 
         describe "labelOrInstr" $ do
             it "should handle a label" $
-                parseGood (labelOrInstr emptyDecls) ".start" $ I.Label "start"
+                parseGood (labelOrInstr emptyDecls) ".start" $ Label "start"
             it "should handle an instruction" $
-                parseGood (labelOrInstr emptyDecls) "  list \"foo\"" $ I.List "foo"
+                parseGood (labelOrInstr emptyDecls) "  list \"foo\"" $ List "foo"
             it "should work with sepBy" $
                 parseGood (sepBy (labelOrInstr emptyDecls) endLine)
                     ".start\n  list \"foo\""
-                    [I.Label "start", I.List "foo"]
+                    [Label "start", List "foo"]
 
         describe "program" $ do
-            it "should handle empty programs" $ ex 1 (mkProgram [])
-            it "should handle just declarations" $ ex 2 (mkProgram [])
-            it "should handle no declarations" $ ex 3 (mkProgram [I.List "foo"])
-            it "should handle labels" $ ex 4 (mkProgram [I.Label "start", I.List "foo"])
-
-
-
+            it "should handle empty programs" $ ex 1 (I.mkProgram [])
+            it "should handle just declarations" $ ex 2 (I.mkProgram [])
+            it "should handle no declarations" $ ex 3 (I.mkProgram [I.List "foo"])
+            it "should handle labels" $ ex 4 (I.mkProgram
+                [I.List "devs",
+                 I.JmpFail 0,
+                 I.Create (DeviceId {devName = "foo", devUUID = Nothing}),
+                 I.Jmp 2,
+                 I.Remove (DeviceId {devName = "foo", devUUID = Nothing}),
+                 I.Jmp 0])
 
