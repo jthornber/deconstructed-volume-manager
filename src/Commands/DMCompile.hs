@@ -27,7 +27,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 ----------------------------------------------
-
+{-
 join' :: [Text] -> Text
 join' = T.intercalate " "
 
@@ -136,7 +136,7 @@ getTargetDMDeps = catMaybes . map devToId . getTargetDeps
 
 ----------------------------------------------
 -- Activation ordering
-
+-}
 -- Filters a list such that each element only appears once,
 -- and that occurence is the first in the list.
 -- eg, [1, 3, 1, 5, 5] -> [1, 3, 5]
@@ -147,7 +147,7 @@ uniq = reverse . fst . foldr go ([], Set.empty) . reverse
         go x (xs, seen)
             | Set.member x seen = (xs, seen)
             | otherwise         = (x:xs, Set.insert x seen)
-
+{-
 shallowDeps :: TableMap -> DeviceId -> [DeviceId]
 shallowDeps tm d = case M.lookup d tm of
     Just ts -> concatMap getTargetDMDeps $ ts
@@ -296,7 +296,7 @@ toProgram :: IR -> I.Program
 toProgram ir = I.mkProgram (toList $ tidyLabels (evalState (linearise ir) 0))
 
 --------------------------------------------
-
+-}
 pError :: Text -> IO ()
 pError = hPutStrLn stderr
 
@@ -305,15 +305,18 @@ usage = do
     pError "usage: dm-compile <device description file>"
     pure $ ExitFailure 1
 
+{-
 readDevices :: Text -> IO (Either Text TableMap)
 readDevices path = do
     contents <- L8.readFile $ T.unpack path
     case eitherDecode contents of
         Left err -> pure $ Left $ T.pack err
         Right xs -> pure . Right . M.fromList $ xs
+        -}
 
 -- FIXME: use EitherT a b IO ?
 dmCompileCmd :: [Text] -> IO ExitCode
+{-
 dmCompileCmd [path] = do
     edevs <- readDevices path
     case edevs of
@@ -329,5 +332,6 @@ dmCompileCmd [path] = do
                 Just ir -> do
                     L8.putStrLn . encodePretty . toProgram $ ir
                     pure ExitSuccess
+                    -}
 dmCompileCmd _ = usage
 

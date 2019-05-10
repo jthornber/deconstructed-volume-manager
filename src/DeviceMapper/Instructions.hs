@@ -33,11 +33,14 @@ data Instruction =
     BeginObject |
     EndObject Text |
     Literal Text Text |
-    Jmp Text |
-    JmpFail Text |
-    Label Text |
+    Jmp Int |
+    JmpFail Int |
     Exit Int
     deriving (Show, Eq)
+
+-- FIXME: limit exit code to 0-255 range
+
+
 
 op :: Text -> [Pair] -> Value
 op opcode fields = object $ ["op" .= opcode] ++ fields
@@ -55,9 +58,8 @@ instance ToJSON Instruction where
     toJSON BeginObject = op "begin-object" []
     toJSON (EndObject key) = op "end-object" ["key" .= key]
     toJSON (Literal key val) = op "literal" ["key" .= key, "value" .= val]
-    toJSON (Jmp label) = op "jmp" ["label" .= label]
-    toJSON (JmpFail label) = op "jmp-fail" ["label" .= label]
-    toJSON (Label name) = op "label" ["name" .= name]
+    toJSON (Jmp dest) = op "jmp" ["dest" .= dest]
+    toJSON (JmpFail dest) = op "jmp-fail" ["dest" .= dest]
     toJSON (Exit code) = op "exit" ["code" .= code]
 
 getOp :: Object -> Parser Text
@@ -79,9 +81,8 @@ instance FromJSON Instruction where
             "begin-object" -> pure BeginObject
             "end-object" -> EndObject <$> v .: "key"
             "literal" -> Literal <$> v .: "key" <*> v .: "value"
-            "jmp" -> Jmp <$> v .: "label"
-            "jmp-fail" -> JmpFail <$> v .: "label"
-            "label" -> Label <$> v .: "name"
+            "jmp" -> Jmp <$> v .: "dest"
+            "jmp-fail" -> JmpFail <$> v .: "dest"
             "exit" -> Exit <$> v .: "code"
             _ -> undefined --  "unknown opcode"
     parseJSON _ = mzero

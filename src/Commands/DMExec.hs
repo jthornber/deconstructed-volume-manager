@@ -51,14 +51,8 @@ newState ctrl code = VMState {
     _vmCtrl = ctrl,
     _vmCode = code,
     _vmPC = 0,
-    _vmLabels = labels,
     _vmLastIoctlFailed = False,
     _vmObj = [H.empty]}
-    where
-        labels = foldr isLabel H.empty (zip (elems $ code ^. I.programInstructions) [0..])
-
-        isLabel (I.Label name, pc) z = H.insert name pc z
-        isLabel _ z = z
 
 type VM = StateT VMState IO
 
@@ -86,17 +80,9 @@ getInstr = do
 incPC :: VM ()
 incPC = modify (\vm -> vm & vmPC %~ (+ 1))
 
+-- FIXME: check the dest is in bounds?
 setPC :: I.Address -> VM ()
 setPC pc = modify (\vm -> vm & vmPC .~ pc)
-
-jmpLabel :: Text -> VM (Maybe Int)
-jmpLabel name = do
-    vm <- get
-    case H.lookup name (vm ^. vmLabels) of
-        Nothing -> undefined -- "no such label"
-        Just pc -> do
-            setPC pc
-            pure Nothing
 
 dm :: (Fd -> IO (IoctlResult a)) -> VM (IoctlResult a)
 dm fn = do
@@ -155,14 +141,12 @@ step' (I.EndObject key) = do
 step' (I.Literal key val) = do
     modify $ \vm -> vm & vmObj %~ insertPair key (toJSON val)
     pure Nothing
-step' (I.Jmp label) = jmpLabel label
-step' (I.JmpFail name) = do
+step' (I.Jmp dest) = setPC dest >> pure Nothing
+step' (I.JmpFail dest) = do
     vm <- get
     if vm ^. vmLastIoctlFailed
-    then jmpLabel name
-    else pure Nothing
-
-step' (I.Label _) = pure Nothing
+        then setPC dest >> pure Nothing
+        else pure Nothing
 
 -- FIXME: we need a way of reporting the ioctl error codes
 step :: VM (Maybe Int)

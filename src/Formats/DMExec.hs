@@ -3,7 +3,7 @@ module Formats.DMExec (
     parseAsm,
 
     -- only exported for testing
-    Declarations (..),
+    Declarations,
     lit,
     space',
     tok,
@@ -17,7 +17,6 @@ module Formats.DMExec (
     labelInstr,
     labelOrInstr,
     indented,
-    space',
     endLine,
     foo,
     program
@@ -25,16 +24,13 @@ module Formats.DMExec (
 
 import Protolude
 
-import Control.Applicative
 import Control.Monad
 import Data.Attoparsec.Text
-import Data.ByteString
 import Data.Char
 import Data.Map.Strict as M
 import Data.Text (Text)
-import Data.Text.Encoding as E
 import Data.Text as T
-import DeviceMapper.Instructions as I
+import qualified DeviceMapper.Instructions as I
 import DeviceMapper.LowLevelTypes
 
 -- Declarations are used to predefine literals to make the instructions
@@ -46,6 +42,25 @@ data Decl =
     deriving (Eq, Show)
 
 type Declarations = M.Map Text Decl
+
+data AsmInstruction =
+    RemoveAll |
+    List Text |
+    Create DeviceId |
+    Remove DeviceId |
+    Suspend DeviceId |
+    Resume DeviceId |
+    Load DeviceId [TableLine] |
+    InfoQ Text DeviceId |
+    TableQ Text DeviceId |
+    BeginObject |
+    EndObject Text |
+    Literal Text Text |
+    Jmp Text |
+    JmpFail Text |
+    Label Text |
+    Exit Int
+    deriving (Show, Eq)
 
 around :: Parser a -> Parser b -> Parser c -> Parser c
 around open close p = open *> p <* close
@@ -94,9 +109,9 @@ quotedString :: Parser Text
 quotedString = tok (doubleQuote *> (T.pack <$> (many' escapedChar)) <* doubleQuote)
 
 reqPair :: Text -> Parser Text
-reqPair key = do
-    k <- identifier
-    guard (k == key)
+reqPair k = do
+    k' <- identifier
+    guard (k' == k)
     lit "="
     quotedString
 
@@ -134,8 +149,8 @@ tableDecl = do
 decls :: Parser Declarations
 decls = M.fromList <$> many' (deviceDecl <|> tableDecl)
 
-labelInstr :: Parser I.Instruction
-labelInstr = char '.' *> (I.Label <$> identifierRaw)
+labelInstr :: Parser AsmInstruction
+labelInstr = char '.' *> (Label <$> identifierRaw)
 
 key :: Parser Text
 key = quotedString
@@ -144,17 +159,17 @@ value :: Parser Text
 value = quotedString
 
 deviceRef :: Declarations -> Parser DeviceId
-deviceRef decls = do
+deviceRef ds = do
     var <- identifier
-    case M.lookup var decls of
+    case M.lookup var ds of
        (Just (Dev d)) -> pure d
        (Just _) -> fail "expected DeviceId, but got Table"
        _ -> fail "no such DeviceId"
 
 tableRef :: Declarations -> Parser [TableLine]
-tableRef decls = do
+tableRef ds = do
     var <- identifier
-    case M.lookup var decls of
+    case M.lookup var ds of
        (Just (Table t)) -> pure t
        (Just _) -> fail "expected Table, but got DeviceId"
        _ -> fail "no such Table"
@@ -171,26 +186,28 @@ indent = many1 nonBreakSpace >> pure ()
 exitCode :: Parser Int
 exitCode = tok decimal
 
+instr :: (Text, Parser AsmInstruction) -> Parser AsmInstruction
 instr (op, p) = (lit op) *> p
 
-instruction :: Declarations -> Parser I.Instruction
-instruction decls = choice . Protolude.map instr $ [
-    ("remove-all", pure I.RemoveAll),
-    ("list", I.List <$> key),
-    ("create", I.Create <$> deviceRef decls),
-    ("remove", I.Remove <$> deviceRef decls),
-    ("suspend", I.Suspend <$> deviceRef decls),
-    ("resume", I.Resume <$> deviceRef decls),
-    ("load", I.Load <$> deviceRef decls <*> tableRef decls),
-    ("info", I.InfoQ <$> key <*> deviceRef decls),
-    ("table", I.TableQ <$> key <*> deviceRef decls),
-    ("begin", pure I.BeginObject),
-    ("end", I.EndObject <$> key),
-    ("literal", I.Literal <$> key <*> value),
-    ("jmp", I.Jmp <$> labelRef),
-    ("jmp-fail", I.JmpFail <$> labelRef),
-    ("exit", I.Exit <$> exitCode)]
+instruction :: Declarations -> Parser AsmInstruction
+instruction ds = choice . Protolude.map instr $ [
+    ("remove-all", pure RemoveAll),
+    ("list", List <$> key),
+    ("create", Create <$> deviceRef ds),
+    ("remove", Remove <$> deviceRef ds),
+    ("suspend", Suspend <$> deviceRef ds),
+    ("resume", Resume <$> deviceRef ds),
+    ("load", Load <$> deviceRef ds <*> tableRef ds),
+    ("info", InfoQ <$> key <*> deviceRef ds),
+    ("table", TableQ <$> key <*> deviceRef ds),
+    ("begin", pure BeginObject),
+    ("end", EndObject <$> key),
+    ("literal", Literal <$> key <*> value),
+    ("jmp", Jmp <$> labelRef),
+    ("jmp-fail", JmpFail <$> labelRef),
+    ("exit", Exit <$> exitCode)]
 
+endLine :: Parser ()
 endLine = (many nonBreakSpace) *> (endOfInput <|> endOfLine)
 
 -- Make sure p doesn't accept whitespace at the start
@@ -198,16 +215,56 @@ bol :: Parser a -> Parser a
 bol p = p <* endLine
 
 indented :: Parser a -> Parser a
-indented p = indent *> p --  <* endLine
+indented p = indent *> p
 
-labelOrInstr :: Declarations -> Parser I.Instruction
-labelOrInstr decls = labelInstr <|> (indented $ instruction decls)
+labelOrInstr :: Declarations -> Parser AsmInstruction
+labelOrInstr ds = labelInstr <|> (indented $ instruction ds)
 
-instructions :: Declarations -> Parser I.Program
-instructions decls = I.mkProgram <$> sepBy (labelOrInstr decls) endLine
+instructions :: Declarations -> Parser [AsmInstruction]
+instructions ds = sepBy (labelOrInstr ds) endLine
+
+stripLabels :: [AsmInstruction] -> Parser [I.Instruction]
+stripLabels code = join <$> mapM toInstr code
+    where
+        toInstr :: AsmInstruction -> Parser [I.Instruction]
+        toInstr (Label _) = pure []
+        toInstr (RemoveAll) = pure [I.RemoveAll]
+        toInstr (List n) = pure [I.List n]
+        toInstr (Create dev) = pure [I.Create dev]
+        toInstr (Remove dev) = pure [I.Remove dev]
+        toInstr (Suspend dev) = pure [I.Suspend dev]
+        toInstr (Resume dev) = pure [I.Resume dev]
+        toInstr (Load dev t) = pure [I.Load dev t]
+        toInstr (InfoQ n dev) = pure [I.InfoQ n dev]
+        toInstr (TableQ n dev) = pure [I.TableQ n dev]
+        toInstr BeginObject = pure [I.BeginObject]
+        toInstr (EndObject n) = pure [I.EndObject n]
+        toInstr (Literal k v) = pure [I.Literal k v]
+        toInstr (Jmp name) = do
+            dest <- lookupLabel name
+            pure [I.Jmp dest]
+        toInstr (JmpFail name) = do
+            dest <- lookupLabel name
+            pure [I.JmpFail dest]
+        toInstr (Exit c) = pure [I.Exit c]
+
+        lookupLabel :: Text -> Parser Int
+        lookupLabel name = case M.lookup name labelTable of
+            Just pc -> pure pc
+            Nothing -> fail $ "unable to find label '" ++ (T.unpack name) ++ "'"
+
+        toTable :: [AsmInstruction] -> Int -> M.Map Text Int
+        toTable [] _ = M.empty
+        toTable ((Label name):xs) pc = M.insert name pc (toTable xs pc)
+        toTable (_:xs) pc = toTable xs (pc + 1)
+
+        labelTable = toTable code 0
+
+assemble :: [AsmInstruction] -> Parser I.Program
+assemble code = I.mkProgram <$> stripLabels code
 
 program :: Parser I.Program
-program = decls >>= instructions
+program = decls >>= instructions >>= assemble
 
 buildError :: [Text] -> Text -> Text
 buildError _ msg = msg
