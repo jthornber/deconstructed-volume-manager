@@ -31,7 +31,7 @@ import Data.Char
 import Data.Map.Strict as M
 import Data.Text (Text)
 import Data.Text as T
-import qualified DeviceMapper.Instructions as I
+import qualified DeviceMapper.VM as VM
 import DeviceMapper.LowLevelTypes
 
 -- Declarations are used to predefine literals to make the instructions
@@ -237,30 +237,30 @@ labelOrInstr ds = do
 instructions :: Declarations -> Parser [AsmInstruction]
 instructions ds = sepBy (labelOrInstr ds) endLine
 
-stripLabels :: [AsmInstruction] -> Parser [I.Instruction]
+stripLabels :: [AsmInstruction] -> Parser [VM.Instruction]
 stripLabels code = join <$> mapM toInstr code
     where
-        toInstr :: AsmInstruction -> Parser [I.Instruction]
+        toInstr :: AsmInstruction -> Parser [VM.Instruction]
         toInstr (Label _) = pure []
-        toInstr (RemoveAll) = pure [I.RemoveAll]
-        toInstr (List n) = pure [I.List n]
-        toInstr (Create dev) = pure [I.Create dev]
-        toInstr (Remove dev) = pure [I.Remove dev]
-        toInstr (Suspend dev) = pure [I.Suspend dev]
-        toInstr (Resume dev) = pure [I.Resume dev]
-        toInstr (Load dev t) = pure [I.Load dev t]
-        toInstr (InfoQ n dev) = pure [I.InfoQ n dev]
-        toInstr (TableQ n dev) = pure [I.TableQ n dev]
-        toInstr BeginObject = pure [I.BeginObject]
-        toInstr (EndObject n) = pure [I.EndObject n]
-        toInstr (Literal k v) = pure [I.Literal k v]
+        toInstr (RemoveAll) = pure [VM.RemoveAll]
+        toInstr (List n) = pure [VM.List n]
+        toInstr (Create dev) = pure [VM.Create dev]
+        toInstr (Remove dev) = pure [VM.Remove dev]
+        toInstr (Suspend dev) = pure [VM.Suspend dev]
+        toInstr (Resume dev) = pure [VM.Resume dev]
+        toInstr (Load dev t) = pure [VM.Load dev t]
+        toInstr (InfoQ n dev) = pure [VM.InfoQ n dev]
+        toInstr (TableQ n dev) = pure [VM.TableQ n dev]
+        toInstr BeginObject = pure [VM.BeginObject]
+        toInstr (EndObject n) = pure [VM.EndObject n]
+        toInstr (Literal k v) = pure [VM.Literal k v]
         toInstr (Jmp name) = do
             dest <- lookupLabel name
-            pure [I.Jmp dest]
+            pure [VM.Jmp dest]
         toInstr (JmpFail name) = do
             dest <- lookupLabel name
-            pure [I.JmpFail dest]
-        toInstr (Exit c) = pure [I.Exit c]
+            pure [VM.JmpFail dest]
+        toInstr (Exit c) = pure [VM.Exit c]
 
         lookupLabel :: Text -> Parser Int
         lookupLabel name = case M.lookup name labelTable of
@@ -274,16 +274,16 @@ stripLabels code = join <$> mapM toInstr code
 
         labelTable = toTable code 0
 
-assemble :: [AsmInstruction] -> Parser I.Program
-assemble code = I.mkProgram <$> stripLabels code
+assemble :: [AsmInstruction] -> Parser VM.Program
+assemble code = VM.mkProgram <$> stripLabels code
 
-program :: Parser I.Program
+program :: Parser VM.Program
 program = decls >>= instructions >>= assemble
 
 buildError :: [Text] -> Text -> Text
 buildError _ msg = msg
 
-parseAsm :: Text -> Either Text I.Program
+parseAsm :: Text -> Either Text VM.Program
 parseAsm input = case parse program input of
     Fail _ ctxts msg -> Left $ buildError (fmap T.pack ctxts) (T.pack msg)
     Partial _ -> Left $ "incomplete input"

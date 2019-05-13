@@ -16,7 +16,7 @@ import Test.QuickCheck
 import Control.Exception (evaluate)
 
 import DeviceMapper.LowLevelTypes
-import qualified DeviceMapper.Instructions as I
+import qualified DeviceMapper.VM as VM
 import Formats.DMExec
 import Data.List
 
@@ -36,7 +36,7 @@ decls2 = M.fromList [
     ("foo", Dev (DeviceId "foo" Nothing)),
     ("table", Table [TableLine "linear" 1024 "/dev/sdc 0"])]
 
-ex :: Int -> I.Program -> IO ()
+ex :: Int -> VM.Program -> IO ()
 ex n expected = do
     txt <- T.readFile path
     parseGood program txt expected
@@ -210,14 +210,14 @@ spec = parallel $ do
                     [Label "start", List "foo"]
 
         describe "program" $ do
-            it "should handle empty programs" $ ex 1 (I.mkProgram [])
-            it "should handle just declarations" $ ex 2 (I.mkProgram [])
-            it "should handle no declarations" $ ex 3 (I.mkProgram [I.List "foo"])
-            it "should handle labels" $ ex 4 (I.mkProgram
-                [I.List "devs",
-                 I.JmpFail 0,
-                 I.Create (DeviceId {devName = "foo", devUUID = Nothing}),
-                 I.Jmp 2,
-                 I.Remove (DeviceId {devName = "foo", devUUID = Nothing}),
-                 I.Jmp 0])
+            it "should handle empty programs" $ ex 1 (VM.mkProgram [])
+            it "should handle just declarations" $ ex 2 (VM.mkProgram [])
+            it "should handle no declarations" $ ex 3 (VM.mkProgram [VM.List "foo"])
+            it "should handle labels" $ ex 4 (VM.mkProgram
+                [VM.List "devs",
+                 VM.JmpFail 0,
+                 VM.Create (DeviceId {devName = "foo", devUUID = Nothing}),
+                 VM.Jmp 2,
+                 VM.Remove (DeviceId {devName = "foo", devUUID = Nothing}),
+                 VM.Jmp 0])
 

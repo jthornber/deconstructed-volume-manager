@@ -10,7 +10,7 @@ module Commands.DMCompile (
 
 import Protolude
 
-import qualified DeviceMapper.Instructions as I
+import qualified DeviceMapper.VM as VM
 import DeviceMapper.LowLevelTypes
 import DeviceMapper.HighLevelTypes
 
